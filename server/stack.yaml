@@ -1,0 +1,15 @@
+resolver:
+  url: https://raw.githubusercontent.com/commercialhaskell/stackage-snapshots/master/lts/22/6.yaml
+
+local-bin-path: ./bin/
+
+packages:
+- .
+
+extra-deps:
+- mysql-haskell-1.1.3@sha256:1e8dbfff67037a0b0e9e9aa358d0c4c9f0888456cff6027a53f55954a254fd29,5100
+- crypton-x509-1.7.6@sha256:c567657a705b6d6521f9dd2de999bf530d618ec00f3b939df76a41fb0fe94281,2339
+- crypton-x509-store-1.6.9@sha256:422b9b9f87a7382c66385d047615b16fc86a68c08ea22b1e0117c143a2d44050,1750
+- crypton-x509-system-1.6.7@sha256:023ed573d82983bc473a37a89e0434a085b413be9f68d07e085361056afd4637,1532
+- tls-1.8.0@sha256:0ea435fb1969384c76e6b6ba49c509cec55eec29f60dd2c335151d9c8a4e8b4f,5571
+- crypton-x509-validation-1.6.12@sha256:85989721b64be4b90de9f66ef641c26f57575cffed1a50d707065fb60176f386,2227

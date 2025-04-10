@@ -1,0 +1,5 @@
+node_modules
+__pycache__
+.stack-work
+.DS_Store
+/client/dist/bundle.js

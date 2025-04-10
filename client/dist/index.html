@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en-US">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="Content-Type" content="text/html;charset=utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, shrink-to-fit=no" />
+  <!-- <link rel="preload" href="./SourceCodePro-Medium.ttf.woff2" as="font" type="font/woff2" crossorigin> -->
+  <link rel="stylesheet" href="style.css" rev="stylesheet" type="text/css">
+  <title>Page</title>
+</head>
+
+<body>
+  <!-- Captcha -->
+  <div id="captcha">
+    <div
+      id="cf-turnstile"
+      data-sitekey="0x4AAAAAAAzDIfRnxqCcAMqi"
+      data-theme="light"
+      data-callback="turnstileCallback"
+    ></div>
+  </div>
+  <!-- Hidden Form -->
+  <form id="hiddenForm">
+    <input type="text" id="hiddenInput" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+  </form>
+  <!-- Canvas -->
+  <canvas id="canvas" contenteditable="true" tabindex="0" role="textarea"></canvas>
+  <div id="navigator"></div>
+  <div id="spinner"></div>
+    
+  <script type="text/javascript" src="bundle.js"></script>
+  <script src="https://challenges.cloudflare.com/turnstile/v0/api.js?onload=onloadTurnstileCallback" defer></script>
+</body>
+
+</html>

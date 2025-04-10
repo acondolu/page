@@ -1,0 +1,89 @@
+@font-face {
+  font-family: 'SourceCodePro';
+  font-weight: 400;
+  font-style: normal;
+  src: url("./SourceCodePro-Medium.ttf.woff2") format('woff2');
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  font-family: SourceCodePro;
+}
+
+html {
+  background-image: url('dot_grid_light.svg');
+  background-repeat: repeat;
+}
+
+body, html {
+  overflow: hidden;
+  width: 100%;
+  height: 100%;
+}
+
+* {
+  user-select: none;
+  -ms-user-select: none;
+  -webkit-user-select: none;
+  -khtml-user-select: none;
+  -moz-user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-user-drag: none;
+}
+
+#navigator {
+  white-space: pre;
+  position: fixed;
+  bottom: 0;
+  right: 0;
+  margin: 1em;
+  color: black;
+  background-color: white;
+  cursor: pointer;
+}
+
+#canvas {
+  transform-origin: left top;
+  transform: scale(0.5);
+}
+
+#hiddenInput {
+  position: absolute;
+  top: 0;
+  width: 100%;
+  border: none;
+  caret-color: transparent;
+  background-color: transparent;
+}
+
+textarea:focus, input:focus {
+  outline: none;
+}
+
+div#spinner {
+  font-family: 'SourceCodePro', monospace;
+  position: absolute;
+  top: 0;
+}
+
+#captcha {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+@media (prefers-color-scheme: dark) {
+  html {
+    background: black;
+    background-image: url('dot_grid_dark.svg');
+    color: white;
+  }
+  #navigator {
+    color: white;
+    background-color: black;
+  }
+}

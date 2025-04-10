@@ -1,0 +1,38 @@
+name: Build
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  build-js:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install npm dependencies
+        run: npm i
+        working-directory: ./client
+      - name: Build
+        run: npm run build
+        working-directory: ./client
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist-js
+          path: client/dist/*
+  build-hs:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Cache dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.stack
+          key: ${{ runner.os }}-store-${{ hashFiles('server/stack.yaml.lock') }}-${{ hashFiles('server/page-server.cabal') }}
+      - name: Build
+        run: stack install
+        working-directory: ./server
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist-hs
+          path: server/bin/page-server

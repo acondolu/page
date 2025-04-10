@@ -1,0 +1,9 @@
+cf-turnstile:
+  secret-key: 1x0000000000000000000000000000000AA
+
+server:
+  port: 8765
+
+backup:
+  path: ./page.bak
+  tmp: ./page.tmp

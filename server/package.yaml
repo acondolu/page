@@ -1,0 +1,84 @@
+name:                page-server
+version:             0.1.0.0
+github:              "acondolu/page"
+license:             BSD-3-Clause
+author:              "Andrea Condoluci"
+maintainer:          "andreacondoluci@gmail.com"
+copyright:           "2024 Andrea Condoluci"
+description:         Please see the README on GitHub at <https://github.com/acondolu/page#readme>
+
+dependencies:
+- base >= 4.7 && < 5
+- websockets
+- text
+- containers
+- bytestring
+- unliftio
+- async
+- aeson
+- vector
+- wreq
+- lens
+- split
+- yaml
+- primitive
+- binary
+- unliftio
+- unix
+- clock
+- fast-logger
+
+ghc-options:
+- -Wall
+- -Wcompat
+- -Widentities
+- -Wincomplete-record-updates
+- -Wincomplete-uni-patterns
+- -Wmissing-export-lists
+- -Wmissing-home-modules
+- -Wredundant-constraints
+- -Wno-unused-top-binds
+
+default-extensions:
+- RecordWildCards
+- OverloadedStrings
+- StrictData
+- TupleSections
+- LambdaCase
+- RankNTypes
+- ScopedTypeVariables
+- RankNTypes
+- BangPatterns
+- NamedFieldPuns
+- TypeApplications
+- DerivingStrategies
+
+source-dirs:
+  - src
+
+executables:
+  page-server:
+    main:                Main.hs
+    source-dirs:
+    - app
+    dependencies:
+    - optparse-applicative
+    ghc-options:
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+
+tests:
+  page-server-test:
+    main: Test.hs
+    source-dirs:
+      - test
+    dependencies:
+      - base
+      - HUnit
+      - QuickCheck
+      - random
+      - tasty
+      - tasty-hunit
+      - tasty-quickcheck
+    build-tools: HUnit
