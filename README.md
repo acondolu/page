@@ -60,3 +60,11 @@ Contributions are welcome! Some possible future ideas:
 
 - Support for unicode
 - Support for hyperlinks
+
+## AI Agents
+
+```sh
+python3 -m venv venv
+venv/bin/pip install -r requirements.txt
+venv/bin/python3 -m ai
+```

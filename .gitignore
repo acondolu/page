@@ -3,3 +3,4 @@ __pycache__
 .stack-work
 .DS_Store
 /client/dist/bundle.js
+/venv
