@@ -1,6 +1,5 @@
 module Page.Test.Coordinates (tests) where
 
-import Page.Constants (block_size, quad_size)
 import Page.Geometry.Coordinates
 import Test.Tasty
 import Test.Tasty.HUnit

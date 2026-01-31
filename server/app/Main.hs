@@ -169,6 +169,9 @@ viewport ConnState {dx, dy, rx, ry, w, h} = do
     divCeil :: Int -> Int -> Int
     divCeil a b = -(div (-a) b)
 
+emptyViewport :: ConnState -> Bool
+emptyViewport ConnState {w, h} = w <= 0 || h <= 0
+
 handleConnection :: Logger -> Bool -> Database.DB -> WS.Connection -> IO ()
 handleConnection infoLog robotMode db conn = do
   lastRevision <- Database.revision db
@@ -204,19 +207,18 @@ handleConnection infoLog robotMode db conn = do
           sendDiff state state'
           loop state'
         Command.WriteChar {x, y, c} -> do
-          let writeChar strokes' = do
-                let x' = fromIntegral (dx state) + x
-                    y' = fromIntegral (dy state) + y
-                    coord = TileRelativeCharCoord' x' y'
-                unless (not robotMode && isForbidden state x y) $
-                  Cursor.writeCharAt (cursor state) coord c
-                loop state {strokes = strokes'}
-          if robotMode
-            then writeChar (strokes state)
-            else
-              Security.observeStroke (strokes state) >>= \case
-                Nothing -> abort conn "flood"
-                Just strokes' -> writeChar strokes'
+          mStrokes <- if robotMode
+            then pure $ Just $ strokes state
+            else Security.observeStroke (strokes state)
+          case mStrokes of
+            Nothing -> abort conn "flood"
+            Just strokes' -> do
+              let x' = fromIntegral (dx state) + x
+                  y' = fromIntegral (dy state) + y
+                  coord = TileRelativeCharCoord' x' y'
+              unless (not robotMode && isForbidden state x y) $
+                Cursor.writeCharAt (cursor state) coord c
+              loop state {strokes = strokes'}
         Command.MoveAbsolute {ax, ay, rx, ry} -> do
           unless (moveAbsoluteOkay ax ay rx ry) $
             abort conn "illegal absolute move"
@@ -249,13 +251,19 @@ handleConnection infoLog robotMode db conn = do
           WS.sendTextData conn $ encode Command.Pong
           loop state {lastRevision = rev}
         Command.ReadRelative0 {} -> do
-          let area = Geometry.Area [viewport state]
+          let Geometry.Rect x1 y1 _ _ = viewport state
+          let area = Geometry.Area [Geometry.Rect x1 y1 x1 y1]
           regions <- Cursor.query (cursor state) area
-          forM_ regions $ \region ->
-            send conn $ blockToRect state region
+          case regions of
+            [] -> send conn $ Command.Rect 0 0 $ replicate block_size "                "
+            _ ->
+              forM_ regions $ \region ->
+                send conn $ blockToRect state region
           loop state
 
     -- send new blocks visible due to change of viewport
+    sendDiff state state' | emptyViewport state' = do
+      WS.sendTextData conn $ encode Command.Done
     sendDiff state state' = do
       let area = Geometry.rdiff (viewport state') (viewport state)
       unless (Geometry.nullA area) $ do
