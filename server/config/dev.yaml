@@ -4,6 +4,8 @@ cf-turnstile:
 server:
   port: 8765
 
+robots: true
+
 backup:
   path: ./page.bak
   tmp: ./page.tmp

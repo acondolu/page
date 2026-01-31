@@ -56,7 +56,11 @@ data Config = Config
     -- | WebSocket server
     server :: ServerConfig,
     -- | Database backup
-    backup :: BackupConfig
+    backup :: BackupConfig,
+    -- | When True, enable "robots" mode: only AI agents
+    -- may connect, and all usual security checks are disabled
+    -- (verification, rate limiting, ...).
+    robots :: Bool
   }
 
 instance FromJSON Config where
@@ -64,6 +68,7 @@ instance FromJSON Config where
     cfTurnstile <- o .: "cf-turnstile"
     server <- o .: "server"
     backup <- o .: "backup"
+    robots <- o .:? "robots" .!= False
     pure Config {..}
 
 parse :: ByteString -> Either String Config

@@ -19,6 +19,7 @@ data SendTy
   | Resize {width :: Int, height :: Int}
   | WriteChar {x :: Int, y :: Int, c :: Char}
   | Ping {}
+  | ReadRelative0 {}
   deriving (Show)
 
 instance FromJSON SendTy where
@@ -44,6 +45,7 @@ instance FromJSON SendTy where
         c <- o .: "c"
         pure WriteChar {..}
       "ping" -> pure Ping
+      "read0" -> pure ReadRelative0
       tag -> parseFail $ "SendTy: unknown tag: " <> show tag
 
 type Block = [Text] -- FIXME

@@ -50,7 +50,8 @@ main' fp = do
     Right cfg -> do
       let port = Config.port $ Config.server cfg
           backupCfg = Config.backup cfg
-      db <- load infoLog backupCfg
+          robotMode = Config.robots cfg
+      db <- load infoLog backupCfg robotMode
       withAsync (backupDaemon infoLog backupCfg db) $ \_ -> do
         WS.runServer "0.0.0.0" port $ application infoLog cfg db
 
@@ -76,22 +77,24 @@ verify cfg pending = flip catchAny (\e -> print ("verify: " <> show e) >> throwI
 type Logger = String -> IO ()
 
 application :: Logger -> Config.Config -> Database.DB -> WS.ServerApp
-application infoLog config db pending =
-  verify (Config.cfTurnstile config) pending >>= \case
+application infoLog config db pending = do
+  let robotMode = Config.robots config
+  result <- if robotMode
+    then pure $ Security.Success ()
+    else verify (Config.cfTurnstile config) pending
+  case result of
     s@(Security.Error str) -> do
       infoLog $ show s
       WS.rejectRequest pending $ BS8.pack str
-    s@Security.Success {} -> do
-      infoLog $ show s
-      conn <-
-        WS.acceptRequestWith
-          pending
-          WS.defaultAcceptRequest
-            { WS.acceptHeaders =
-                [ ("Sec-WebSocket-Protocol", "page.acondolu.me")
-                ]
-            }
-      handleConnection infoLog db conn `catchAny` \e ->
+    Security.Success () -> do
+      conn <- WS.acceptRequestWith
+            pending
+            WS.defaultAcceptRequest
+              { WS.acceptHeaders =
+                  [ ("Sec-WebSocket-Protocol", "page.acondolu.me")
+                  ]
+              }
+      handleConnection infoLog robotMode db conn `catchAny` \e ->
         infoLog $ "handleConnection: " <> show e
 
 welcomeMessage :: [String]
@@ -166,8 +169,8 @@ viewport ConnState {dx, dy, rx, ry, w, h} = do
     divCeil :: Int -> Int -> Int
     divCeil a b = -(div (-a) b)
 
-handleConnection :: Logger -> Database.DB -> WS.Connection -> IO ()
-handleConnection infoLog db conn = do
+handleConnection :: Logger -> Bool -> Database.DB -> WS.Connection -> IO ()
+handleConnection infoLog robotMode db conn = do
   lastRevision <- Database.revision db
   cursor <- Cursor.origin db
   loop $
@@ -201,16 +204,19 @@ handleConnection infoLog db conn = do
           sendDiff state state'
           loop state'
         Command.WriteChar {x, y, c} -> do
-          Security.observeStroke (strokes state) >>= \case
-            Nothing ->
-              abort conn "flood"
-            Just strokes' -> do
-              let x' = fromIntegral (dx state) + x
-                  y' = fromIntegral (dy state) + y
-                  coord = TileRelativeCharCoord' x' y'
-              unless (isForbidden state x y) $
-                Cursor.writeCharAt (cursor state) coord c
-              loop state {strokes = strokes'}
+          let writeChar strokes' = do
+                let x' = fromIntegral (dx state) + x
+                    y' = fromIntegral (dy state) + y
+                    coord = TileRelativeCharCoord' x' y'
+                unless (not robotMode && isForbidden state x y) $
+                  Cursor.writeCharAt (cursor state) coord c
+                loop state {strokes = strokes'}
+          if robotMode
+            then writeChar (strokes state)
+            else
+              Security.observeStroke (strokes state) >>= \case
+                Nothing -> abort conn "flood"
+                Just strokes' -> writeChar strokes'
         Command.MoveAbsolute {ax, ay, rx, ry} -> do
           unless (moveAbsoluteOkay ax ay rx ry) $
             abort conn "illegal absolute move"
@@ -242,6 +248,12 @@ handleConnection infoLog db conn = do
           sendDeltas state
           WS.sendTextData conn $ encode Command.Pong
           loop state {lastRevision = rev}
+        Command.ReadRelative0 {} -> do
+          let area = Geometry.Area [viewport state]
+          regions <- Cursor.query (cursor state) area
+          forM_ regions $ \region ->
+            send conn $ blockToRect state region
+          loop state
 
     -- send new blocks visible due to change of viewport
     sendDiff state state' = do
@@ -322,8 +334,8 @@ recv conn = do
 -------------------------------------------------------------------------------
 -- Load / Save Database
 
-load :: Logger -> Config.BackupConfig -> IO Database.DB
-load infoLog Config.BackupConfig {path} = do
+load :: Logger -> Config.BackupConfig -> Bool -> IO Database.DB
+load infoLog Config.BackupConfig {path} robotMode = do
   db <-
     Database.load path `catchAny` \e -> do
       infoLog $ "could not load backup: " <> show e
@@ -331,7 +343,8 @@ load infoLog Config.BackupConfig {path} = do
   -- start the cursor at (0,0)
   cursor <- Cursor.origin db
   -- initialize storage by storing welcome message
-  Cursor.writeStrings cursor (TileRelativeCharCoord' 0 0) welcomeMessage
+  unless robotMode $
+    Cursor.writeStrings cursor (TileRelativeCharCoord' 0 0) welcomeMessage
   pure db
 
 save :: Logger -> Config.BackupConfig -> Database.DB -> IO ()
