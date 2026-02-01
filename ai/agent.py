@@ -2,73 +2,9 @@ import json
 import os
 from typing import Any, Generator, List, Dict, Optional
 import aiohttp
+import random
 from .client import Client, ToolCallResult
-from .roles import pick_role, PROMPTS, ROLES
-
-TOOLS: List[Dict[str, Any]] = [
-    {
-      "type": "function",
-      "function": {
-        "name": "read",
-        "description": "Reads a rectangular block of text from the grid.",
-        "parameters": {
-          "type": "object",
-          "properties": {
-            "x": {
-              "type": "integer",
-              "description": "starting x-coordinate"
-            },
-            "y": {
-              "type": "integer",
-              "description": "starting y-coordinate"
-            },
-            "w": {
-              "type": "integer",
-              "description": "width of the region to read"
-            },
-            "h": {
-              "type": "integer",
-              "description": "height of the region to read"
-            }
-          },
-          "required": ["x", "y", "w", "h"]
-        }
-      },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "write",
-            "description": "Overwrites text on the grid starting at the given coordinates.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "x": {
-                        "type": "integer",
-                        "description": "starting x-coordinate"
-                    },
-                    "y": {
-                        "type": "integer",
-                        "description": "starting y-coordinate"
-                    },
-                    "text": {
-                        "type": "string",
-                        "description": "text to write; may include newlines",
-                        "maxLength": 64,
-                    }
-                },
-                "required": ["x", "y", "text"],
-            },
-        },
-        },
-        {
-            "type": "function",
-            "function": {
-                "name": "stop",
-                "description": "Immediately terminates the current interaction.",
-            }
-        }
-]
+from .roles import pick_role, PROMPTS, ROLES, TOOLS
 
 class Agent:
     def __init__(self, llms: Dict[str, Any], conn: Client, role: Optional[str] = None):
@@ -77,13 +13,21 @@ class Agent:
         self.conn = conn
         self.system_prompt = PROMPTS["assistant"]
         self.user_role = role if role else pick_role()
-        if self.user_role not in ROLES:
-            raise ValueError(f"Invalid role: {self.user_role}")
+        assert self.user_role in ROLES
         self.user_prompt = PROMPTS[self.user_role]
         self.messages: List[Any] = []
+        x = random.randint(-128, 128)
+        y = random.randint(-128, 128)
+        print(f">>> role={self.user_role}, hint x={x}, y={y}")
         self.append({
             "role": "assistant",
-            "content": "Hello! I am ready to explore the page for you. How would you like to begin?"
+            "content": " ".join([
+                "Hello! Let's explore the shared page together.",
+                "Most visitors start at coordinates (0,0).",
+                f"However, last time we left off at coordinates ({x},{y}).",
+                "Moreover, you can direct me to any location on the page.",
+                "How would you like to begin?"
+            ]),
         })
 
     def append(self, msg: Any) -> None:
@@ -195,6 +139,7 @@ def for_user(messages: List[Any]) -> Generator[Any, None, None]:
 
 def take_only(messages: List[Any], n: int) -> List[Any]:
     """ Take only the last n messages, preserving tool results with their calls """
+    return messages # disable for now
     result: List[Any] = []
     count = 0
     for msg in reversed(messages):
