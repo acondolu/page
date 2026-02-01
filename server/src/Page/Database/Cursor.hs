@@ -13,6 +13,7 @@ where
 
 import Control.Monad (when)
 import Data.ByteString.Internal (c2w)
+import Data.Function ((&))
 import Data.IORef (atomicWriteIORef, readIORef)
 import Data.Word (Word16, Word8)
 import Page.Constants
@@ -60,8 +61,8 @@ jumpTo :: AbsoluteTileCoord -> Cursor -> IO Cursor
 jumpTo (AbsoluteTileCoord x y) Cursor {cDB} =
   Cursor cDB <$> getTileForce x y cDB
 
-queryN :: Area Word16 -> Tile Cell -> IO [Pinned Word16 Block]
-queryN area n
+queryN :: Tile Cell -> Area Word16 -> IO [Pinned Word16 Block]
+queryN n area
   | nullA area = pure []
   | otherwise = do
       Cell _ _ qt <- a <$> readIORef n
@@ -77,9 +78,10 @@ query Cursor {..} area
       tile <- readIORef cTile
       let resCenter = do
             let Cell _ _ qt = a tile
-            map (unrelative $ Point 0 0) $
-              QuadTree.query qt $
-                relativeA (Point 0 0) area
+            area
+              & relativeA (Point 0 0)
+              & QuadTree.query qt
+              & map (unrelative $ Point 0 0)
       let queryAtDir dir =
             case getNeighbor dir tile of
               Nothing -> pure []
@@ -87,9 +89,10 @@ query Cursor {..} area
                 -- convert direction to offset point
                 let (dx, dy) = directionToOffset dir
                     offset = Point (dx * quad_size) (dy * quad_size)
-                let a = relativeA offset area
-                res <- queryN a neighbor
-                pure $ map (unrelative offset) res
+                area
+                  & relativeA offset
+                  & queryN neighbor
+                  & fmap (map (unrelative offset))
       resDirs <- mapM queryAtDir directions
       pure $ resCenter <> concat resDirs
   where

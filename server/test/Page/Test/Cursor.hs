@@ -3,10 +3,23 @@ module Page.Test.Cursor (test) where
 import qualified Page.Database as Database
 import Page.Database.Block (fromString)
 import qualified Page.Database.Cursor as Cursor
-import Page.Geometry (Area (..), Pinned (..), Rect (..))
+import Page.Geometry
 import Page.Geometry.Coordinates
 import Test.Tasty
 import Test.Tasty.HUnit
+import Page.Constants
+
+test :: TestTree
+test =
+  testGroup
+    "Page.Test.Cursor"
+    [ testCase "test1" test1,
+      testCase "test1'" test1',
+      testCase "test2" test2,
+      testCase "test3" test3,
+      testCase "test4" test4,
+      testCase "test5" test5
+    ]
 
 new :: IO Cursor.Cursor
 new = do
@@ -86,13 +99,15 @@ test4 = do
       print blocks
       assertFailure "Unexpected query result"
 
-test :: TestTree
-test =
-  testGroup
-    "Page.Test.Cursor"
-    [ testCase "test1" test1,
-      testCase "test1'" test1',
-      testCase "test2" test2,
-      testCase "test3" test3,
-      testCase "test4" test4
-    ]
+-- | Relative projections over neighbouring tiles.
+test5 :: Assertion
+test5 = do
+  let dir d = do
+        let (dx, dy) = directionToOffset d
+        let offset = Point (dx * quad_size) (dy * quad_size)
+        relativeA offset
+  let a1 = Area [Rect (-1) (-1) (10) (10)]
+  dir West a1 @?= Area [Rect 65535 0 65535 10]
+  dir North a1 @?= Area [Rect 0 65535 10 65535]
+  dir NorthWest a1 @?= Area [Rect 65535 65535 65535 65535]
+  relativeA (Point 0 0) a1 @?= Area [Rect 0 0 10 10]
