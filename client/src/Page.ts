@@ -16,6 +16,7 @@ export class Page extends EventTarget {
   input: Input;
   spinner: Spinner;
   remote: Remote;
+  contentEditable: boolean;
 
   // Relative paper coordinates
   // (relative to the bigint coords)
@@ -25,8 +26,9 @@ export class Page extends EventTarget {
   // Like cursorX, relative paper coordinate
   column: number = 0;
 
-  constructor(token: string) {
+  constructor(token: string, contentEditable: boolean = true) {
     super();
+    this.contentEditable = contentEditable;
     // Text Cache
     this.textCache = new TextCache();
     // CanvasRenderer
@@ -38,30 +40,37 @@ export class Page extends EventTarget {
     ) as HTMLInputElement;
     this.canvasRenderer = new CanvasRenderer(canvasElement, inputElement);
     this.canvasRenderer.addEventListener("paint", () => this.paint());
-    this.canvasRenderer.addEventListener("set-cursor", (event) => {
-      const e = event as CustomEvent<{ cursorX: number; cursorY: number }>;
-      this.onSetCursor(e.detail.cursorX, e.detail.cursorY);
-    });
+    if (contentEditable) {
+      canvasElement.contentEditable = "true";
+      canvasElement.tabIndex = 0;
+      canvasElement.role = "textarea";
+      this.canvasRenderer.addEventListener("set-cursor", (event) => {
+        const e = event as CustomEvent<{ cursorX: number; cursorY: number }>;
+        this.onSetCursor(e.detail.cursorX, e.detail.cursorY);
+      });
+    }
     this.canvasRenderer.addEventListener("move-rel", (event) => {
       const e = event as CustomEvent<{ x: number; y: number }>;
       this.remote.moveRelative(e.detail.x, e.detail.y);
     });
     // Input
     this.input = new Input(inputElement);
-    this.input.addEventListener("write-char", (event) => {
-      const e = event as CustomEvent<string>;
-      this.onWriteChar(e.detail);
-    });
-    this.input.addEventListener("change-cursor", (event) => {
-      const e = event as CustomEvent<
-        (
-          cursorX: number,
-          cursorY: number,
-          column: number,
-        ) => [number, number, number]
-      >;
-      this.onChangeCursor(e.detail);
-    });
+    if (contentEditable) {
+      this.input.addEventListener("write-char", (event) => {
+        const e = event as CustomEvent<string>;
+        this.onWriteChar(e.detail);
+      });
+      this.input.addEventListener("change-cursor", (event) => {
+        const e = event as CustomEvent<
+          (
+            cursorX: number,
+            cursorY: number,
+            column: number,
+          ) => [number, number, number]
+        >;
+        this.onChangeCursor(e.detail);
+      });
+    }
     this.input.addEventListener("resize", (event) => {
       const e = event as CustomEvent<{ width: number; height: number }>;
       this.onResize(e.detail.width, e.detail.height);
@@ -151,7 +160,11 @@ export class Page extends EventTarget {
     this.isPainting = true;
     return window.requestAnimationFrame(() => {
       this.isPainting = false;
-      this.canvasRenderer.draw(this.textCache, this.cursorX, this.cursorY);
+      this.canvasRenderer.draw(
+        this.textCache,
+        this.cursorX, this.cursorY,
+        this.contentEditable
+      );
       this.navigator.update(this.cursorX, this.cursorY);
     });
   }

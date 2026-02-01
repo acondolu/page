@@ -15,3 +15,5 @@ export function idempotencyKey(): string {
 export function wsUrl(): string {
   return isProduction ? "wss://page.acondolu.me" : "ws://localhost:8765";
 }
+
+export const contentEditable: boolean = true;

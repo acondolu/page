@@ -123,7 +123,7 @@ export class CanvasRenderer extends EventTarget {
     this.dispatchEvent(new CustomEvent("paint"));
   }
 
-  draw(textCache: TextCache, cursorX: number, cursorY: number): void {
+  draw(textCache: TextCache, cursorX: number, cursorY: number, drawCursor: boolean): void {
     const canvas = this.canvasElement;
     const width = this.width;
     const height = this.height;
@@ -189,19 +189,21 @@ export class CanvasRenderer extends EventTarget {
     }
 
     // Cursor
-    ctx.strokeStyle = "red";
-    // ctx.strokeRect(0, 0, width-1, height-1);
-    const cX = Number(rMult(cursorX, font.width) - x);
-    const cY = rMult(cursorY, font.height) - y;
-    ctx.strokeRect(
-      cX,
-      Number(cY),
-      rToDouble(font.width),
-      rToDouble(font.height),
-    );
-    ctx.fillStyle = "yellow";
-    ctx.globalCompositeOperation = "multiply";
-    ctx.fillRect(cX, cY, rToDouble(font.width), rToDouble(font.height));
+    if (drawCursor) {
+      ctx.strokeStyle = "red";
+      // ctx.strokeRect(0, 0, width-1, height-1);
+      const cX = Number(rMult(cursorX, font.width) - x);
+      const cY = rMult(cursorY, font.height) - y;
+      ctx.strokeRect(
+        cX,
+        Number(cY),
+        rToDouble(font.width),
+        rToDouble(font.height),
+      );
+      ctx.fillStyle = "yellow";
+      ctx.globalCompositeOperation = "multiply";
+      ctx.fillRect(cX, cY, rToDouble(font.width), rToDouble(font.height));
+    }
 
     // ctx.fillStyle = "gray";
     // if (x < 0) {

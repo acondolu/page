@@ -11,7 +11,7 @@ async function main(token: string) {
     p.remote.newToken(token);
     return;
   }
-  p = new Page(token);
+  p = new Page(token, Config.contentEditable);
   await p.init();
 }
 
