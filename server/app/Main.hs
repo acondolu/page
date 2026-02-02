@@ -14,6 +14,7 @@ import qualified Network.WebSockets as WS
 import qualified Options.Applicative as OptParse
 import qualified Page.Command as Command
 import qualified Page.Config as Config
+import qualified Page.TUI as TUI
 import Page.Constants
 import qualified Page.Database as Database
 import qualified Page.Database.Cursor as Cursor
@@ -52,8 +53,12 @@ main' fp = do
           backupCfg = Config.backup cfg
           robotMode = Config.robots cfg
       db <- load infoLog backupCfg robotMode
-      withAsync (backupDaemon infoLog backupCfg db) $ \_ -> do
-        WS.runServer "0.0.0.0" port $ application infoLog cfg db
+      let telnet = case Config.telnetPort cfg of
+            Just p -> TUI.startTUI infoLog db p
+            Nothing -> pure ()
+      withAsync telnet $ \_ ->
+        withAsync (backupDaemon infoLog backupCfg db) $ \_ ->
+          WS.runServer "0.0.0.0" port $ application infoLog cfg db
 
 -- | Security checks on incoming connection
 verify :: Config.CfTurnstileConfig -> WS.PendingConnection -> IO (Security.Result ())

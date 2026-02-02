@@ -28,6 +28,7 @@ dependencies:
 - clock
 - fast-logger
 - aeson-pretty
+- network
 
 ghc-options:
 - -Wall

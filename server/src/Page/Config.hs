@@ -60,7 +60,9 @@ data Config = Config
     -- | When True, enable "robots" mode: only AI agents
     -- may connect, and all usual security checks are disabled
     -- (verification, rate limiting, ...).
-    robots :: Bool
+    robots :: Bool,
+    -- | TCP port for telnet TUI interface
+    telnetPort :: Maybe Int
   }
 
 instance FromJSON Config where
@@ -69,6 +71,7 @@ instance FromJSON Config where
     server <- o .: "server"
     backup <- o .: "backup"
     robots <- o .:? "robots" .!= False
+    telnetPort <- o .:? "telnet-port"
     pure Config {..}
 
 parse :: ByteString -> Either String Config

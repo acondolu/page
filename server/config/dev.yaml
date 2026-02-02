@@ -4,6 +4,8 @@ cf-turnstile:
 server:
   port: 8765
 
+telnet-port: 8766
+
 robots: true
 
 backup:
