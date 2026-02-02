@@ -11,8 +11,8 @@ module Page.Database.Cursor
   )
 where
 
-import Control.Monad (when)
 import Data.ByteString.Internal (c2w)
+import Data.Char (ord)
 import Data.Function ((&))
 import Data.IORef (atomicWriteIORef, readIORef)
 import Data.Word (Word16, Word8)
@@ -158,8 +158,8 @@ findBlock (Cursor db tile) (TileRelativeTileCoord xq yq) blockC = do
 
 -- | Write character at given coordinate relative
 -- to the cursor.
-write :: Cursor -> TileRelativeCharCoord' -> Word8 -> IO ()
-write cursor coord c = do
+writeWord8At :: Cursor -> TileRelativeCharCoord' -> Word8 -> IO ()
+writeWord8At cursor coord c = do
   let db = cDB cursor
       (tileC, blockC, charC) = tileRelativeCharCoord' coord
   -- find the correct tile
@@ -167,11 +167,14 @@ write cursor coord c = do
   -- write c in block
   writeAt db block charC c
 
+-- | Only allow printable ASCII characters (for now ;-)
 writeCharAt :: Cursor -> TileRelativeCharCoord' -> Char -> IO ()
-writeCharAt cursor coord chr = do
-  let w = c2w chr
-  when (w /= 0) $
-    write cursor coord w
+writeCharAt cursor coord c
+  | ord c <= 0x7f && ((c >= '!' && c <= '~') || c == ' ')
+    = writeWord8At cursor coord $ c2w c
+  | otherwise =
+    -- ignore non-printable and non-ascii characters
+    pure ()
 
 writeStringAt :: Cursor -> TileRelativeCharCoord' -> String -> IO ()
 writeStringAt _ _ [] = pure ()
