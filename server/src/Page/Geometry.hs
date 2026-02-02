@@ -43,7 +43,7 @@ data Direction
   deriving (Eq, Show, Enum, Bounded)
 
 -- | Convert Direction to coordinate offsets (dx, dy)
-directionToOffset :: Direction -> (Int, Int)
+directionToOffset :: (Num a) => Direction -> (a, a)
 directionToOffset North = (0, -1)
 directionToOffset NorthEast = (1, -1)
 directionToOffset East = (1, 0)

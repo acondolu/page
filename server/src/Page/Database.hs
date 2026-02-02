@@ -20,6 +20,7 @@ module Page.Database
     revision,
     getTileForce,
     mkTile,
+    deleteTile,
 
     -- * Locking
     Locked (..),
@@ -132,12 +133,12 @@ blockToTexts (Block _ cs) = go (Block.toByteString cs)
           a' : go bs'
 
 -- | Create a new tile and insert it into the database
-mkTile :: Integer -> Integer -> DB' -> IO (DB', Tile Cell)
-mkTile x y db = do
+mkTile :: Integer -> Integer -> DB' -> Locked (DB', Tile Cell)
+mkTile x y db = Locked $ do
   v <- newIORef undefined
   let lookupAt dir = do
         let (dx, dy) = directionToOffset dir
-        case Map.lookup (x + fromIntegral dx, y + fromIntegral dy) db of
+        case Map.lookup (x + dx, y + dy) db of
           Just ref -> do
             modifyIORef ref $
               setNeighbor (opposite dir) $
@@ -162,11 +163,16 @@ mkTile x y db = do
 -- | Get the tile at given position. If it doesn't
 -- exist, create a new one and return it.
 getTileForce :: Integer -> Integer -> DB -> IO (Tile Cell)
-getTileForce x y (DB _ mvar) = do
-  mem <- readMVar mvar
-  case Map.lookup (x, y) mem of
+getTileForce x y db@(DB _ mvar) = do
+  -- first try without lock
+  db' <- readMVar mvar
+  case Map.lookup (x, y) db' of
     Just n -> pure n
-    Nothing -> modifyMVar mvar $ mkTile x y
+    Nothing -> withLock' db $ \db' -> do
+      -- retry with lock now
+      case Map.lookup (x, y) db' of
+        Just n -> pure (db', n)
+        Nothing -> mkTile x y db' 
 
 -- | Write a byte to a specific position in a block and update timestamps
 writeAt :: DB -> Block -> BlockRelativeCharCoord -> Word8 -> IO ()
@@ -177,6 +183,16 @@ writeAt (DB cnt _) Block {bRevision, bBlock} charCoord c = do
   -- set block counter
   atomicWriteIORef bRevision n
 
+deleteTile :: DB -> Tile Cell -> IO ()
+deleteTile db tile = withLock' db $ \db' -> Locked $ do
+  t@Tile' {a = Cell i j _} <- readIORef tile
+  let go dir = case getNeighbor dir t of
+        Nothing -> pure ()
+        Just neighbor -> modifyIORef neighbor $
+          setNeighbor (opposite dir) Nothing
+  mapM_ go [minBound .. maxBound]
+  pure (Map.delete (i, j) db', ())
+  
 -------------------------------------------------------------------------------
 -- (De)Seralization
 

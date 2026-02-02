@@ -4,11 +4,14 @@ module Page.Database.Block
     newBlock,
     writeAt,
     fromString,
+    bempty,
+    bcount,
   )
 where
 
 import Control.Monad (when)
 import Data.Binary (Binary (..))
+import qualified Data.ByteString as B
 import qualified Data.ByteString.Char8 as BS8
 import qualified Data.ByteString.Internal as BS
 import Data.Word (Word8)
@@ -68,3 +71,11 @@ newBlock = do
 writeAt :: Block -> BlockRelativeCharCoord -> Word8 -> IO ()
 writeAt (Block fp) (BlockRelativeCharCoord x y) c = BS.unsafeWithForeignPtr fp $ \p ->
   pokeElemOff p (fromIntegral x + fromIntegral y * block_size) c
+
+-- | Check if a block is empty (all spaces).
+bempty :: Block -> Bool
+bempty (Block p) = B.all (== 32) $ BS.BS p size
+
+-- | Count the number of non-space characters in a block.
+bcount :: Block -> Int
+bcount (Block p) = B.length $ B.filter (/= 32) $ BS.BS p size

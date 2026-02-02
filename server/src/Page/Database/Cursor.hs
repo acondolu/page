@@ -111,6 +111,7 @@ query Cursor {..} area
 -- Create if it doens't exist.
 getBlockForce :: Lock -> QuadRelativeBlockCoord -> Tile Cell -> IO Block
 getBlockForce l (QuadRelativeBlockCoord x y) tile = do
+  -- first try without lock
   Cell _ _ qt <- a <$> readIORef tile
   case QuadTree.lookup x y qt of
     Just b -> pure b
@@ -140,7 +141,7 @@ moveAdjacent db n dir = do
         Just tile -> pure (db', tile)
         Nothing -> do
           let (dx, dy) = directionToOffset dir
-          (db'', tile) <- Locked $ mkTile (i + fromIntegral dx) (j + fromIntegral dy) db'
+          (db'', tile) <- mkTile (i + dx) (j + dy) db'
           Locked $ atomicWriteIORef n $ setNeighbor dir (Just tile) n''
           pure (db'', tile)
 
