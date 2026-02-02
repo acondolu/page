@@ -153,6 +153,8 @@ data ConnState = ConnState
   }
 
 viewport :: ConnState -> Geometry.Rect Int
+viewport ConnState {w, h}
+  | w == 0 || h == 0 = Geometry.Rect 0 0 0 0
 viewport ConnState {dx, dy, rx, ry, w, h} = do
   let x1 = fromIntegral dx + rx
       y1 = fromIntegral dy + ry
@@ -162,7 +164,9 @@ viewport ConnState {dx, dy, rx, ry, w, h} = do
       y1' = y1 `divFloor` block_size
       x2' = x2 `divCeil` block_size
       y2' = y2 `divCeil` block_size
-  Geometry.Rect x1' y1' x2' y2'
+  -- expand by 1 block in all directions to make
+  -- scrolling more seemless
+  Geometry.Rect (x1' - 1) (y1' - 1) (x2' + 1) (y2' + 1)
   where
     divFloor :: Int -> Int -> Int
     divFloor a b = div a b
