@@ -14,13 +14,13 @@ import Data.Text (Text)
 import Numeric (readHex, showHex)
 
 data SendTy
-  = MoveRelative {x :: Int, y :: Int}
-  | MoveAbsolute {ax :: Integer, ay :: Integer, rx :: Int, ry :: Int}
-  | Resize {width :: Int, height :: Int}
-  | WriteChar {x :: Int, y :: Int, c :: Char}
-  | Ping {}
-  | ReadRelative0 {}
-  deriving (Show)
+  = MoveRelative {x :: Int, y :: Int} -- ^ move by (x,y) relative
+  | MoveAbsolute {ax :: Integer, ay :: Integer, rx :: Int, ry :: Int} -- ^ move to absolute (ax,ay), viewport-relative (rx,ry)
+  | Resize {width :: Int, height :: Int} -- ^ resize viewport
+  | WriteChar {x :: Int, y :: Int, c :: Char} -- ^ write character c at (x,y) relative
+  | Ping {} -- ^ client ping: server sends deltas, then Pong
+  | ReadRelative0 {} -- ^ send block at (0,0) relative
+  deriving (Eq, Show)
 
 instance FromJSON SendTy where
   parseJSON = withObject "SendTy" $ \o ->
@@ -51,10 +51,9 @@ instance FromJSON SendTy where
 type Block = [Text] -- FIXME
 
 data RecvTy
-  = Rect {bx :: Int, by :: Int, text :: Block}
-  | Done {}
-  | Char {charX :: Int, charY :: Int, w :: Char}
-  | Pong {}
+  = Rect {bx :: Int, by :: Int, text :: Block} -- ^ rectangle of text at (bx,by)
+  | Done {} -- ^ all updates sent (unused)
+  | Pong {} -- ^ server pong (all updates sent)
 
 instance ToJSON RecvTy where
   toJSON Rect {..} =
@@ -67,12 +66,6 @@ instance ToJSON RecvTy where
   toJSON Done {} =
     object
       [ "tag" .= ("done" :: Text)
-      ]
-  toJSON Char {..} =
-    object
-      [ "tag" .= ("char" :: Text),
-        "x" .= charX,
-        "y" .= charY
       ]
   toJSON Pong {} =
     object ["tag" .= ("pong" :: Text)]
