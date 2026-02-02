@@ -37,15 +37,14 @@ empty = Empty
 insert :: (Show a) => Coord -> Coord -> a -> QuadTree a -> QuadTree a
 insert = insert' half
 
--- FIXME: wrong: x and y should vary `mod` n
 insert' :: (Show a) => Coord -> Coord -> Coord -> a -> QuadTree a -> QuadTree a
-insert' _ x y a Empty = Leaf x y a
-insert' 0 x y a node = error $ show ("insert'" :: String, x, y, a, node)
-insert' n x y a (Leaf x' y' a') =
+insert' _ x y !a Empty = Leaf x y a
+insert' 0 x y !a node = error $ show ("insert'" :: String, x, y, a, node)
+insert' n x y !a (Leaf x' y' a') =
   Node Empty Empty Empty Empty
     & insert' n x' y' a'
     & insert' n x y a
-insert' n x y a Node {..} = do
+insert' n x y !a Node {..} = do
   let n' = n `shiftR` 1
   if x .&. n == 0
     then
