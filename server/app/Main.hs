@@ -21,15 +21,15 @@ import qualified Page.Database.Cursor as Cursor
 import qualified Page.Geometry as Geometry
 import Page.Geometry.Coordinates
 import qualified Page.Security as Security
-import System.Log.FastLogger (defaultBufSize, newStderrLoggerSet, pushLogStrLn, toLogStr)
-import UnliftIO (catchAny, readIORef, throwIO, withAsync)
+import System.Exit (exitFailure)
+import System.Log.FastLogger (newStderrLoggerSet, pushLogStrLn, rmLoggerSet, toLogStr)
+import UnliftIO (bracket, catchAny, readIORef, throwIO, withAsync)
 import UnliftIO.Concurrent (threadDelay)
 import UnliftIO.Directory (renameFile)
+import Prelude hiding (log)
 
 main :: IO ()
-main = do
-  configPath <- OptParse.execParser opts
-  main' configPath
+main = OptParse.execParser opts >>= main'
   where
     opts = OptParse.info (parser OptParse.<**> OptParse.helper) OptParse.fullDesc
     parser =
@@ -40,29 +40,32 @@ main = do
 -- | Like 'main', but the path to the configuration
 -- file is passed as an argument.
 main' :: FilePath -> IO ()
-main' fp = do
-  loggerSet <- newStderrLoggerSet defaultBufSize
-  let infoLog = pushLogStrLn loggerSet . toLogStr
-  configResult <- Config.open fp
-  case configResult of
-    Left err -> do
-      infoLog $ "error opening config file: " ++ show err
-      ioError $ userError $ "failed to load configuration at " <> fp
-    Right cfg -> do
-      let port = Config.port $ Config.server cfg
-          backupCfg = Config.backup cfg
-          robotMode = Config.robots cfg
-      db <- load infoLog backupCfg robotMode
-      let telnet = case Config.telnetPort cfg of
-            Just p -> TUI.startTUI infoLog db p
-            Nothing -> pure ()
-      withAsync telnet $ \_ ->
-        withAsync (backupDaemon infoLog backupCfg db) $ \_ ->
-          WS.runServer "0.0.0.0" port $ application infoLog cfg db
+main' fp =
+  withLogger $ \log -> do
+    Config.open fp >>= \case
+      Left err -> do
+        log $ "main': config file error: " ++ show err
+        exitFailure
+      Right cfg -> do
+        let port = Config.port $ Config.server cfg
+            backupCfg = Config.backup cfg
+            robotMode = Config.robots cfg
+        db <- load log backupCfg robotMode
+        let telnet = case Config.telnetPort cfg of
+              Just p -> TUI.startTUI log db p
+              Nothing -> pure ()
+        withAsync telnet $ \_ ->
+          withAsync (backupDaemon log backupCfg db) $ \_ ->
+            WS.runServer "0.0.0.0" port $ application log cfg db
+  where
+    withLogger act = bracket (newStderrLoggerSet 0) rmLoggerSet $
+      \loggerSet -> act (pushLogStrLn loggerSet . toLogStr)
+
+type Logger = String -> IO ()
 
 -- | Security checks on incoming connection
-verify :: Config.CfTurnstileConfig -> WS.PendingConnection -> IO (Security.Result ())
-verify cfg pending = flip catchAny (\e -> print ("verify: " <> show e) >> throwIO e) $ do
+verify :: Logger -> Config.CfTurnstileConfig -> WS.PendingConnection -> IO (Security.Result ())
+verify log cfg pending = withLogErrors $ do
   let headers = WS.requestHeaders $ WS.pendingRequest pending
   let secretKey = Config.secretKey cfg
   let remoteIP'
@@ -78,18 +81,20 @@ verify cfg pending = flip catchAny (\e -> print ("verify: " <> show e) >> throwI
               Security.verifyToken secretKey token remoteIP idempotencyKey
             _ -> pure $ Security.Error "Invalid Sec-WebSocket-Protocol"
         _ -> pure $ Security.Error "Sec-WebSocket-Protocol missing"
-
-type Logger = String -> IO ()
+  where
+    withLogErrors act = catchAny act $ \e -> do
+      log ("verify: " <> show e)
+      throwIO e
 
 application :: Logger -> Config.Config -> Database.DB -> WS.ServerApp
-application infoLog config db pending = do
+application log config db pending = do
   let robotMode = Config.robots config
   result <- if robotMode
     then pure $ Security.Success ()
-    else verify (Config.cfTurnstile config) pending
+    else verify log (Config.cfTurnstile config) pending
   case result of
     s@(Security.Error str) -> do
-      infoLog $ show s
+      log $ show s
       WS.rejectRequest pending $ BS8.pack str
     Security.Success () -> do
       conn <- WS.acceptRequestWith
@@ -99,8 +104,8 @@ application infoLog config db pending = do
                   [ ("Sec-WebSocket-Protocol", "page.acondolu.me")
                   ]
               }
-      handleConnection infoLog robotMode db conn `catchAny` \e ->
-        infoLog $ "handleConnection: " <> show e
+      handleConnection log robotMode db conn `catchAny` \e ->
+        log $ "handleConnection: " <> show e
 
 welcomeMessage :: [String]
 welcomeMessage =
@@ -158,8 +163,8 @@ data ConnState = ConnState
   }
 
 viewport :: ConnState -> Geometry.Rect Int
-viewport ConnState {w, h}
-  | w == 0 || h == 0 = Geometry.Rect 0 0 0 0
+viewport state
+  | emptyViewport state = Geometry.Rect 0 0 0 0
 viewport ConnState {dx, dy, rx, ry, w, h} = do
   let x1 = fromIntegral dx + rx
       y1 = fromIntegral dy + ry
@@ -182,7 +187,7 @@ emptyViewport :: ConnState -> Bool
 emptyViewport ConnState {w, h} = w <= 0 || h <= 0
 
 handleConnection :: Logger -> Bool -> Database.DB -> WS.Connection -> IO ()
-handleConnection infoLog robotMode db conn = do
+handleConnection log robotMode db conn = do
   lastRevision <- Database.revision db
   cursor <- Cursor.origin db
   loop $
@@ -203,7 +208,8 @@ handleConnection infoLog robotMode db conn = do
   where
     loop !state = do
       cmd <- recv conn
-      infoLog $ "command received: " <> show cmd
+      unless (cmd == Command.Ping) $
+        log $ "handleConnection: incoming: " <> show cmd
       case cmd of
         Command.MoveRelative {x, y} -> do
           let state' = state {rx = x, ry = y}
@@ -271,7 +277,7 @@ handleConnection infoLog robotMode db conn = do
           loop state
 
     -- send new blocks visible due to change of viewport
-    sendDiff state state' | emptyViewport state' = do
+    sendDiff _state state' | emptyViewport state' = do
       WS.sendTextData conn $ encode Command.Done
     sendDiff state state' = do
       let area = Geometry.rdiff (viewport state') (viewport state)
@@ -289,7 +295,7 @@ handleConnection infoLog robotMode db conn = do
         m <- readIORef modif
         let doSend = m > lastRevision state
         when doSend $ do
-          infoLog "pong"
+          log "pong"
           send conn $ blockToRect state region
       WS.sendTextData conn $ encode Command.Done
 
@@ -352,10 +358,10 @@ recv conn = do
 -- Load / Save Database
 
 load :: Logger -> Config.BackupConfig -> Bool -> IO Database.DB
-load infoLog Config.BackupConfig {path} robotMode = do
+load log Config.BackupConfig {path} robotMode = do
   db <-
     Database.load path `catchAny` \e -> do
-      infoLog $ "could not load backup: " <> show e
+      log $ "could not load backup: " <> show e
       Database.new
   -- start the cursor at (0,0)
   cursor <- Cursor.origin db
@@ -365,19 +371,19 @@ load infoLog Config.BackupConfig {path} robotMode = do
   pure db
 
 save :: Logger -> Config.BackupConfig -> Database.DB -> IO ()
-save infoLog Config.BackupConfig {..} state = do
-  infoLog $ "save: backing up to " <> path
+save log Config.BackupConfig {..} state = do
+  log $ "save: backing up to " <> path
   -- database is first saved to a temporary file, then
   -- file is renamed to the final backup path to ensure
   -- atomic backup operations
   Database.save state tmp
   renameFile tmp path
-  infoLog "save: backup done"
+  log "save: backup done"
 
 backupDaemon :: Logger -> Config.BackupConfig -> Database.DB -> IO ()
-backupDaemon infoLog cfg state = do
+backupDaemon log cfg state = do
   threadDelay 60000000 -- 1 minute (microseconds)
-  infoLog "backupDaemon: starting backup"
-  save infoLog cfg state `catchAny` \e ->
-    infoLog $ "backupDaemon: could not backup: " <> show e
-  backupDaemon infoLog cfg state
+  log "backupDaemon: starting backup"
+  save log cfg state `catchAny` \e ->
+    log $ "backupDaemon: could not backup: " <> show e
+  backupDaemon log cfg state
