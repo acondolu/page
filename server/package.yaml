@@ -29,6 +29,7 @@ dependencies:
 - fast-logger
 - aeson-pretty
 - network
+- random
 
 ghc-options:
 - -Wall

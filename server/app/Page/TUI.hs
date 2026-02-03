@@ -3,7 +3,8 @@
 module Page.TUI (startTUI) where
 
 import Control.Exception (bracket, catch, finally)
-import Control.Monad (unless, void)
+import Control.Monad (replicateM, unless, void)
+import Data.List (sortOn)
 import Data.ByteString.Builder (Builder)
 import qualified Data.ByteString.Builder as B
 import Data.IORef (IORef, newIORef, readIORef, writeIORef)
@@ -45,6 +46,7 @@ import System.IO
     hWaitForInput,
     latin1,
   )
+import System.Random (randomRIO)
 import UnliftIO.Concurrent (forkIO)
 
 -------------------------------------------------------------------------------
@@ -124,6 +126,13 @@ handleClient infoLog db h = do
   -- Detect terminal size
   (termH, termW) <- detectTermSize h
 
+  -- CAPTCHA challenge
+  passed <- captchaChallenge h termW termH
+  unless passed $ do
+    hPutBuilder h $ B.string7 "\r\nVerification failed.\r\n"
+    hFlush h
+    ioError $ userError "captcha failed"
+
   cursor <- Cursor.origin db
   lastRev <- Cursor.cRevision cursor
 
@@ -151,6 +160,83 @@ cleanup :: Handle -> IO ()
 cleanup h = do
   hPutBuilder h $ esc "[?25h" <> esc "[2J" <> esc "[H"
   hFlush h
+
+-------------------------------------------------------------------------------
+-- CAPTCHA
+
+captchaChallenge :: Handle -> Int -> Int -> IO Bool
+captchaChallenge h termW termH = do
+  let pool = "abcdefghjkmnprstuvwxyz23456789"
+      count = 6
+      usableTop = 4
+      usableBot = termH - 2
+      bandH = max 1 ((usableBot - usableTop) `div` count)
+
+  -- Generate random characters
+  chars <- replicateM count $ do
+    i <- randomRIO (0, length pool - 1)
+    pure (pool !! i)
+
+  -- Assign each character to a shuffled vertical band
+  bandOrder <- shuffleList [0 .. count - 1]
+  positions <- mapM (\(_, band) -> do
+    let minR = usableTop + band * bandH
+        maxR = min (minR + bandH - 1) (usableBot - 1)
+    row <- randomRIO (minR, max minR maxR)
+    col <- randomRIO (4, max 4 (termW - 10))
+    pure (row, col)
+    ) (zip [(0 :: Int) ..] bandOrder)
+
+  -- Render captcha screen
+  hPutBuilder h $ esc "[2J" <> esc "[H"
+  -- Header
+  hPutBuilder h $
+    esc "[1;1H"
+      <> esc "[7m"
+      <> B.string7 (take termW $ " CAPTCHA " <> replicate (termW - 9) ' ')
+      <> esc "[0m"
+  hPutBuilder h $
+    esc "[2;1H"
+      <> B.string7 " Find and type characters [1] through ["
+      <> B.intDec count
+      <> B.string7 "] in order:"
+
+  -- Display scattered characters
+  mapM_ (\(idx, ch, (row, col)) ->
+    hPutBuilder h $
+      esc "[" <> B.intDec row <> B.char7 ';' <> B.intDec col <> B.char7 'H'
+        <> esc "[1m"
+        <> B.string7 ("[" <> show idx <> "]")
+        <> esc "[0m"
+        <> B.char7 ' '
+        <> B.char7 ch
+    ) (zip3 [(1 :: Int) ..] chars positions)
+
+  -- Prompt
+  hPutBuilder h $
+    esc "[" <> B.intDec termH <> B.string7 ";1H"
+      <> B.string7 " > "
+  hFlush h
+
+  -- Verify: read one key at a time, match or fail
+  let go [] = pure True
+      go (expected : rest) = do
+        key <- readKey h
+        case key of
+          KChar c
+            | c == expected -> do
+                hPutBuilder h $ B.char7 c
+                hFlush h
+                go rest
+          KEsc -> pure False
+          KCtrlC -> pure False
+          _ -> pure False
+  go chars
+
+shuffleList :: [a] -> IO [a]
+shuffleList xs = do
+  tagged <- mapM (\x -> do r <- randomRIO (0 :: Int, 1000000); pure (r, x)) xs
+  pure $ map snd $ sortOn fst tagged
 
 -------------------------------------------------------------------------------
 -- Main loop
