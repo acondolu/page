@@ -198,6 +198,7 @@ handleConnection :: Logger -> UTCTime -> Security.Verify -> Bool -> Database.DB 
 handleConnection log verifyExpireTs reVerify robotMode db conn = do
   lastRevision <- Database.revision db
   cursor <- Cursor.origin db
+  strokes <- Security.newStrokeLimiter
   loop $
     ConnState
       { ax = 0,
@@ -211,7 +212,7 @@ handleConnection log verifyExpireTs reVerify robotMode db conn = do
         isNearZero = True,
         cursor,
         lastRevision,
-        strokes = Security.newStrokeLimiter,
+        strokes,
         verifyExpires = verifyExpireTs
       }
   where
@@ -235,18 +236,18 @@ handleConnection log verifyExpireTs reVerify robotMode db conn = do
           sendDiff state state'
           loop state'
         Command.WriteChar {x, y, c} -> do
-          mStrokes <- if robotMode
-            then pure $ Just $ strokes state
+          allowed <- if robotMode
+            then pure True -- no rate limiting for robots, they're too fast
             else Security.observeStroke (strokes state)
-          case mStrokes of
-            Nothing -> abort conn "flood"
-            Just strokes' -> do
+          if allowed
+            then do
               let x' = fromIntegral (dx state) + x
                   y' = fromIntegral (dy state) + y
                   coord = TileRelativeCharCoord' x' y'
               unless (not robotMode && isForbidden state x y) $
                 Cursor.writeCharAt (cursor state) coord c
-              loop state {strokes = strokes'}
+              loop state
+            else abort conn "flood"
         Command.MoveAbsolute {ax, ay, rx, ry} -> do
           unless (moveAbsoluteOkay ax ay rx ry) $
             abort conn "illegal absolute move"

@@ -62,6 +62,8 @@ library:
     - src
   dependencies:
     - http-client
+    - stm
+    - array
 
 executables:
   page-server:

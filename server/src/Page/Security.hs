@@ -22,6 +22,7 @@ import qualified Network.Wreq as Wreq
 import System.Clock (Clock (Monotonic), TimeSpec (sec), getTime)
 import UnliftIO.Exception (tryAny)
 import Data.Time
+import qualified Page.RingBuffer as RingBuffer
 
 type Verify = String -> IO (Result UTCTime)
 
@@ -75,43 +76,54 @@ parseIso =
 
 ---------------------------------------------------------------------
 -- Typing rate limiting.
--- Try and protect from flooding with a simple sliding window
--- approach.
+-- Sliding window approach with multiple signals:
+--   1. Burst protection: max 30 strokes per 5 seconds
+--   2. Sustained rate: max 200 strokes per minute
+--   3. Natural pauses: require some >1s gaps in the last minute
 
 type Sec = Int64
 
-data StrokeLimiter = StrokeLimiter
-  { -- | Start of current window
-    timestamp :: Sec,
-    -- | Number of keystrokes in the current window
-    counter :: Int
-  }
-  deriving (Show)
+-- | Sliding window rate limiter storing per-second stroke counts.
+newtype StrokeLimiter = StrokeLimiter (RingBuffer.RingBuffer (Sec, Int))
 
-newStrokeLimiter :: StrokeLimiter
-newStrokeLimiter = StrokeLimiter 0 0
+-- Short window (burst protection)
+shortWindow, longWindow :: Sec
+shortWindow = 5
+longWindow = 60
 
--- | Size of sliding window (in seconds).
-windowSize :: Sec
-windowSize = 5
+maxShortStrokes, maxLongStrokes, minPauses :: Int
+maxShortStrokes = 30
+maxLongStrokes = 200
+minPauses = 2
 
--- | Maximum allowed keystrokes per window.
-maxStrokes :: Int
-maxStrokes = 30
+newStrokeLimiter :: IO StrokeLimiter
+newStrokeLimiter = StrokeLimiter <$> RingBuffer.bufNew (fromIntegral longWindow)
 
--- | Ensure that the number of keystrokes within a sliding
--- time window does not exceed the allowed limit.
-observeStroke :: StrokeLimiter -> IO (Maybe StrokeLimiter)
-observeStroke (StrokeLimiter lastT lastN) = do
+-- | Observe a keystroke. Returns True if allowed, False if rate limited.
+observeStroke :: StrokeLimiter -> IO Bool
+observeStroke (StrokeLimiter buf) = do
   now <- sec <$> getTime Monotonic
-  pure $!
-    if now - lastT <= windowSize
-      then do
-        -- period is still going
-        let lastN' = lastN + 1
-        if lastN' < maxStrokes
-          then Just $ StrokeLimiter lastT lastN'
-          else Nothing
-      else do
-        -- new period
-        Just $ StrokeLimiter now 1
+  entries <- RingBuffer.toList buf
+  let shortCount = sum [n | (t, n) <- entries, t > now - shortWindow]
+      longEntries = [(t, n) | (t, n) <- entries, t > now - longWindow]
+      longCount = sum $ map snd longEntries
+      pauseCount = countPauses $ map fst longEntries
+      allowed = shortCount < maxShortStrokes
+             && longCount < maxLongStrokes
+             && (longCount < 50 || pauseCount >= minPauses)
+  if allowed
+    then do
+      case entries of
+        _ | Just (t, n) <- lastMay entries, t == now ->
+            RingBuffer.bufReplaceLast buf (now, n + 1)
+        _ -> RingBuffer.bufPush buf (now, 1)
+      pure True
+    else pure False
+
+-- | Count gaps > 1 second between consecutive timestamps.
+countPauses :: [Sec] -> Int
+countPauses ts = length $ filter (> 1) $ zipWith (-) (drop 1 ts) ts
+
+lastMay :: [a] -> Maybe a
+lastMay [] = Nothing
+lastMay xs = Just $ last xs
