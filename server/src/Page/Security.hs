@@ -1,5 +1,6 @@
 module Page.Security
-  ( verifyToken,
+  ( Verify,
+    verifyToken,
     Result (..),
 
     -- * Typing rate limiting
@@ -9,31 +10,68 @@ module Page.Security
   )
 where
 
-import Control.Lens ((^.))
-import Data.Aeson (Result (..))
+import Control.Concurrent (threadDelay)
+import Control.Lens ((^.), (&), (.~))
+import Data.Aeson (Result (..), (.:))
 import qualified Data.Aeson as Aeson
-import qualified Data.Aeson.KeyMap as KeyMap
+import Data.Aeson.Types (parseMaybe)
 import Data.Int (Int64)
+import Network.HTTP.Client (defaultManagerSettings, managerResponseTimeout, responseTimeoutMicro)
 import Network.Wreq (FormParam ((:=)))
 import qualified Network.Wreq as Wreq
 import System.Clock (Clock (Monotonic), TimeSpec (sec), getTime)
+import UnliftIO.Exception (tryAny)
+import Data.Time
+
+type Verify = String -> IO (Result UTCTime)
 
 -- | Server-side validation of Cloudflare Turnstile tokens.
 -- See https://developers.cloudflare.com/turnstile/get-started/server-side-validation/.
-verifyToken :: String -> String -> String -> String -> IO (Result ())
-verifyToken secretKey token remoteIP idempotencyKey = do
-  let url = "https://challenges.cloudflare.com/turnstile/v0/siteverify"
-  let queryString =
-        [ "secret" := secretKey,
-          "response" := token,
-          "remoteip" := remoteIP,
-          "idempotency_key" := idempotencyKey
-        ]
-  r <- Wreq.post url queryString
-  let body = r ^. Wreq.responseBody
-  case Aeson.decode body of
-    Just (Aeson.Object o) | KeyMap.member "success" o -> pure $ Success ()
-    _ -> pure $ Error "Turnstile verification failed"
+-- When successful, returns the token's expiration time (5 minutes after challenge timestamp).
+verifyToken :: String -> String -> String -> String -> IO (Result UTCTime)
+verifyToken secretKey token remoteIP idempotencyKey
+  | length token > 2048 = pure $ Error "Token too long"
+  | otherwise = retry (5 :: Int)
+  where
+    retry n = do
+      mReq <- tryAny $ Wreq.postWith opts url queryString
+      case mReq of
+        Left _ -> maybeRetry n
+        Right r -> do
+          let body = r ^. Wreq.responseBody
+          case Aeson.decode body of
+            Just (Aeson.Object o) -> do
+              let success = parseMaybe (.: "success") o
+                  errors = parseMaybe (.: "error-codes") o
+                  mChallengeTs = parseMaybe (.: "challenge_ts") o >>= parseIso
+              case (success, errors :: Maybe [String], mChallengeTs) of
+                (Just True, _, Just challengeTs) ->
+                  -- expire in 5 minutes
+                  pure $ Success (300 `addUTCTime` challengeTs)
+                (_, Just errs, _)
+                  | "internal-error" `elem` errs -> maybeRetry n
+                  | otherwise -> pure defaultError
+                _ -> pure defaultError
+            _ -> pure defaultError
+    maybeRetry n
+      | n > 0 = do
+          threadDelay (2 ^ (5 - n) * 1000000)
+          retry (n - 1)
+      | otherwise = pure defaultError
+    url = "https://challenges.cloudflare.com/turnstile/v0/siteverify"
+    queryString =
+      [ "secret" := secretKey,
+        "response" := token,
+        "remoteip" := remoteIP,
+        "idempotency_key" := idempotencyKey
+      ]
+    opts = Wreq.defaults
+      & Wreq.manager .~ Left (defaultManagerSettings { managerResponseTimeout = responseTimeoutMicro 10000 } )
+    defaultError = Error "Turnstile verification failed"
+
+parseIso :: String -> Maybe UTCTime
+parseIso =
+  parseTimeM True defaultTimeLocale "%Y-%m-%dT%H:%M:%S%QZ"
 
 ---------------------------------------------------------------------
 -- Typing rate limiting.

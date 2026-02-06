@@ -7,8 +7,10 @@ module Main (main, main') where
 import Control.Monad (forM_, unless, when)
 import Data.Aeson (eitherDecode, encode)
 import qualified Data.ByteString.Char8 as BS8
+import qualified Data.ByteString.Lazy.Char8 as BL8
 import Data.ByteString.Lazy (ByteString)
 import Data.List.Split (splitOn)
+import Data.Time (UTCTime, getCurrentTime, addUTCTime)
 import Data.Word (Word32, Word64)
 import qualified Network.WebSockets as WS
 import qualified Options.Applicative as OptParse
@@ -64,7 +66,7 @@ main' fp =
 type Logger = String -> IO ()
 
 -- | Security checks on incoming connection
-verify :: Logger -> Config.CfTurnstileConfig -> WS.PendingConnection -> IO (Security.Result ())
+verify :: Logger -> Config.CfTurnstileConfig -> WS.PendingConnection -> IO (Security.Result (UTCTime, Security.Verify))
 verify log cfg pending = withLogErrors $ do
   let headers = WS.requestHeaders $ WS.pendingRequest pending
   let secretKey = Config.secretKey cfg
@@ -77,8 +79,11 @@ verify log cfg pending = withLogErrors $ do
       case lookup "Sec-WebSocket-Protocol" headers of
         Just subprotos ->
           case splitOn ", " $ BS8.unpack subprotos of
-            ["page.acondolu.me", token, idempotencyKey] ->
-              Security.verifyToken secretKey token remoteIP idempotencyKey
+            ["page.acondolu.me", token, idempotencyKey] -> do
+              let verifyFun = \tok -> Security.verifyToken secretKey tok remoteIP idempotencyKey
+              verifyFun token >>= \case
+                Security.Success verifyExpireTs -> pure $ Security.Success (verifyExpireTs, verifyFun)
+                Security.Error err -> pure $ Security.Error err
             _ -> pure $ Security.Error "Invalid Sec-WebSocket-Protocol"
         _ -> pure $ Security.Error "Sec-WebSocket-Protocol missing"
   where
@@ -90,13 +95,14 @@ application :: Logger -> Config.Config -> Database.DB -> WS.ServerApp
 application log config db pending = do
   let robotMode = Config.robots config
   result <- if robotMode
-    then pure $ Security.Success ()
+    then do
+      verifyExpireTs <- addUTCTime (24 * 3600) <$> getCurrentTime
+      pure $ Security.Success (verifyExpireTs, \_ -> pure $ Security.Success verifyExpireTs)
     else verify log (Config.cfTurnstile config) pending
   case result of
-    s@(Security.Error str) -> do
-      log $ show s
+    Security.Error str -> do
       WS.rejectRequest pending $ BS8.pack str
-    Security.Success () -> do
+    Security.Success (verifyExpireTs, reVerify) -> do
       conn <- WS.acceptRequestWith
             pending
             WS.defaultAcceptRequest
@@ -104,7 +110,7 @@ application log config db pending = do
                   [ ("Sec-WebSocket-Protocol", "page.acondolu.me")
                   ]
               }
-      handleConnection log robotMode db conn `catchAny` \e ->
+      handleConnection log verifyExpireTs reVerify robotMode db conn `catchAny` \e ->
         log $ "handleConnection: " <> show e
 
 welcomeMessage :: [String]
@@ -159,7 +165,9 @@ data ConnState = ConnState
     -- | Last revision number. Used for TODO
     lastRevision :: Word64,
     -- | Stroke limiter for security purposes.
-    strokes :: Security.StrokeLimiter
+    strokes :: Security.StrokeLimiter,
+    -- | Expiration time for Turnstile token.
+    verifyExpires :: UTCTime
   }
 
 viewport :: ConnState -> Geometry.Rect Int
@@ -186,8 +194,8 @@ viewport ConnState {dx, dy, rx, ry, w, h} = do
 emptyViewport :: ConnState -> Bool
 emptyViewport ConnState {w, h} = w <= 0 || h <= 0
 
-handleConnection :: Logger -> Bool -> Database.DB -> WS.Connection -> IO ()
-handleConnection log robotMode db conn = do
+handleConnection :: Logger -> UTCTime -> Security.Verify -> Bool -> Database.DB -> WS.Connection -> IO ()
+handleConnection log verifyExpireTs reVerify robotMode db conn = do
   lastRevision <- Database.revision db
   cursor <- Cursor.origin db
   loop $
@@ -203,11 +211,16 @@ handleConnection log robotMode db conn = do
         isNearZero = True,
         cursor,
         lastRevision,
-        strokes = Security.newStrokeLimiter
+        strokes = Security.newStrokeLimiter,
+        verifyExpires = verifyExpireTs
       }
   where
     loop !state = do
       cmd <- recv conn
+      -- check if session expired
+      now <- getCurrentTime
+      when (verifyExpires state < now) $
+        abort conn "Turnstile token expired"
       unless (cmd == Command.Ping) $
         log $ "handleConnection: incoming: " <> show cmd
       case cmd of
@@ -275,6 +288,11 @@ handleConnection log robotMode db conn = do
               forM_ regions $ \region ->
                 send conn $ blockToRect state region
           loop state
+        Command.RenewToken {token} -> do
+          reVerify token >>= \case
+            Security.Success verifyExpireTs' ->
+              loop state {verifyExpires = verifyExpireTs'}
+            Security.Error err -> abort conn $ BL8.pack err
 
     -- send new blocks visible due to change of viewport
     sendDiff _state state' | emptyViewport state' = do

@@ -20,6 +20,7 @@ data SendTy
   | WriteChar {x :: Int, y :: Int, c :: Char} -- ^ write character c at (x,y) relative
   | Ping {} -- ^ client ping: server sends deltas, then Pong
   | ReadRelative0 {} -- ^ send block at (0,0) relative
+  | RenewToken {token :: String} -- ^ renew token for captcha verification
   deriving (Eq, Show)
 
 instance FromJSON SendTy where
@@ -46,6 +47,9 @@ instance FromJSON SendTy where
         pure WriteChar {..}
       "ping" -> pure Ping
       "read0" -> pure ReadRelative0
+      "renew-token" -> do
+        token <- o .: "token"
+        pure RenewToken {..}
       tag -> parseFail $ "SendTy: unknown tag: " <> show tag
 
 type Block = [Text] -- FIXME

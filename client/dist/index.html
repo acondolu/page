@@ -15,8 +15,6 @@
     <div
       id="cf-turnstile"
       data-sitekey="0x4AAAAAAAzDIfRnxqCcAMqi"
-      data-theme="light"
-      data-callback="turnstileCallback"
     ></div>
   </div>
   <!-- Hidden Form -->
@@ -29,7 +27,7 @@
   <div id="spinner"></div>
     
   <script type="text/javascript" src="bundle.js"></script>
-  <script src="https://challenges.cloudflare.com/turnstile/v0/api.js?onload=onloadTurnstileCallback" defer></script>
+  <script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit&onload=onloadTurnstileCallback" defer></script>
 </body>
 
 </html>

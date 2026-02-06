@@ -10,7 +10,8 @@ type SendTy =
   | { tag: "move-absolute"; ax: string; ay: string; x: number; y: number }
   | { tag: "resize"; width: number; height: number }
   | { tag: "write-char"; x: number; y: number; c: string }
-  | { tag: "ping" };
+  | { tag: "ping" }
+  | { tag: "renew-token"; token: string };
 
 /**
  * Messages received from backend.
@@ -107,8 +108,11 @@ export class Remote extends EventTarget {
     });
   }
 
-  newToken(token: string) {
-    // TODO
+  renewToken(token: string) {
+    this.send({
+      tag: "renew-token",
+      token,
+    });
   }
 
   // Debounced method implementations
