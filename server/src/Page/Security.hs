@@ -78,7 +78,7 @@ verifyToken log secretKey token remoteIP idempotencyKey
         "idempotency_key" := idempotencyKey
       ]
     opts = Wreq.defaults
-      & Wreq.manager .~ Left (defaultManagerSettings { managerResponseTimeout = responseTimeoutMicro 10000 } )
+      & Wreq.manager .~ Left (defaultManagerSettings { managerResponseTimeout = responseTimeoutMicro 10000000 }) -- 10s
     defaultError = Error "turnstile: verification failed"
 
 parseIso :: String -> Maybe UTCTime
