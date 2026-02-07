@@ -19,10 +19,10 @@ data RingBuffer a = RingBuffer
   }
 
 bufNew :: Int -> IO (RingBuffer a)
-bufNew cap = do
-  buf <- atomically $ newArray_ (0, cap - 1)
-  startRef <- newTVarIO 0
-  sizeRef <- newTVarIO 0
+bufNew cap = atomically $ do
+  buf <- newArray_ (0, cap - 1)
+  startRef <- newTVar 0
+  sizeRef <- newTVar 0
   pure $ RingBuffer buf cap startRef sizeRef
 
 bufPush :: RingBuffer a -> a -> IO ()
