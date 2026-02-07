@@ -16,7 +16,8 @@ import Data.Aeson (Result (..), (.:))
 import qualified Data.Aeson as Aeson
 import Data.Aeson.Types (parseMaybe)
 import Data.Int (Int64)
-import Network.HTTP.Client (defaultManagerSettings, managerResponseTimeout, responseTimeoutMicro)
+import Network.HTTP.Client (managerResponseTimeout, responseTimeoutMicro)
+import Network.HTTP.Client.TLS (tlsManagerSettings)
 import Network.Wreq (FormParam ((:=)))
 import qualified Network.Wreq as Wreq
 import System.Clock (Clock (Monotonic), TimeSpec (sec), getTime)
@@ -78,7 +79,7 @@ verifyToken log secretKey token remoteIP idempotencyKey
         "idempotency_key" := idempotencyKey
       ]
     opts = Wreq.defaults
-      & Wreq.manager .~ Left (defaultManagerSettings { managerResponseTimeout = responseTimeoutMicro 10000000 }) -- 10s
+      & Wreq.manager .~ Left (tlsManagerSettings { managerResponseTimeout = responseTimeoutMicro 10000000 }) -- 10s
     defaultError = Error "turnstile: verification failed"
 
 parseIso :: String -> Maybe UTCTime
