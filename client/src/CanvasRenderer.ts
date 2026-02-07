@@ -187,6 +187,26 @@ export class CanvasRenderer extends EventTarget {
         i++;
       }
     }
+    const local = textCache.local;
+    ctx.fillStyle = "blue";
+    for (let r of local) {
+      // check if r is visible
+      const rx1 = rMult(r.x1, font.width);
+      const rx2 = rMult(r.x2, font.width);
+      const ry1 = rMult(r.y1, font.height) + font.ascent;
+      const ry2 = rMult(r.y2, font.height) + font.ascent;
+      if (rx1 < x1 && rx2 < x1) continue;
+      if (rx1 >= x2 && rx2 >= x2) continue;
+      if (ry1 < y1 && ry2 < y1) continue;
+      if (ry1 >= y2 && ry2 >= y2) continue;
+      const dx = Number(rx1 - x1);
+      let dy = Number(ry1 - y1);
+      let i = 0;
+      for (let line of r.c) {
+        ctx.fillText(line, dx, dy + rMult(i, font.height));
+        i++;
+      }
+    }
 
     // Cursor
     if (drawCursor) {
