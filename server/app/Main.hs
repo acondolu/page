@@ -58,7 +58,9 @@ main' fp =
               Nothing -> pure ()
         withAsync telnet $ \_ ->
           withAsync (backupDaemon log backupCfg db) $ \_ ->
-            WS.runServer "0.0.0.0" port $ application log cfg db
+            WS.runServer "0.0.0.0" port $ \conn ->
+              application log cfg db conn `catchAny` \e ->
+                log $ "application: error: " <> show e
   where
     withLogger act = bracket (newStderrLoggerSet 0) rmLoggerSet $
       \loggerSet -> act (pushLogStrLn loggerSet . toLogStr)
@@ -93,14 +95,17 @@ verify log cfg pending = withLogErrors $ do
 
 application :: Logger -> Config.Config -> Database.DB -> WS.ServerApp
 application log config db pending = do
+  log "application: start"
   let robotMode = Config.robots config
   result <- if robotMode
     then do
       verifyExpireTs <- addUTCTime (24 * 3600) <$> getCurrentTime
       pure $ Security.Success (verifyExpireTs, \_ -> pure $ Security.Success verifyExpireTs)
     else verify log (Config.cfTurnstile config) pending
+  log $ "application: after verify"
   case result of
     Security.Error str -> do
+      log $ "application: verify failed: " <> str
       WS.rejectRequest pending $ BS8.pack str
     Security.Success (verifyExpireTs, reVerify) -> do
       conn <- WS.acceptRequestWith
@@ -196,9 +201,11 @@ emptyViewport ConnState {w, h} = w <= 0 || h <= 0
 
 handleConnection :: Logger -> UTCTime -> Security.Verify -> Bool -> Database.DB -> WS.Connection -> IO ()
 handleConnection log verifyExpireTs reVerify robotMode db conn = do
+  log "handleConnection: start"
   lastRevision <- Database.revision db
   cursor <- Cursor.origin db
   strokes <- Security.newStrokeLimiter
+  log "handleConnection: before loop"
   loop $
     ConnState
       { ax = 0,
@@ -217,6 +224,7 @@ handleConnection log verifyExpireTs reVerify robotMode db conn = do
       }
   where
     loop !state = do
+      log "handleConnection: loop"
       cmd <- recv conn
       -- check if session expired
       now <- getCurrentTime

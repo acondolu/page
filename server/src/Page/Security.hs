@@ -23,6 +23,7 @@ import System.Clock (Clock (Monotonic), TimeSpec (sec), getTime)
 import UnliftIO.Exception (tryAny)
 import Data.Time
 import qualified Page.RingBuffer as RingBuffer
+import Prelude hiding (log)
 
 type Verify = String -> IO (Result UTCTime)
 
@@ -39,7 +40,9 @@ verifyToken log secretKey token remoteIP idempotencyKey
     retry n = do
       mReq <- tryAny $ Wreq.postWith opts url queryString
       case mReq of
-        Left _ -> maybeRetry n
+        Left err -> do
+          log $ "turnstile: error: " ++ show err
+          maybeRetry n
         Right r -> do
           let body = r ^. Wreq.responseBody
           case Aeson.decode body of
@@ -54,11 +57,13 @@ verifyToken log secretKey token remoteIP idempotencyKey
                 (_, Just errs, _)
                   | "internal-error" `elem` errs -> maybeRetry n
                   | otherwise -> do
-                      log $ "Turnstile verification failed: " ++ show body
+                      log $ "turnstile: failed: " ++ show body
                       pure defaultError
-                _ -> pure defaultError
+                _ -> do
+                  log $ "turnstile: failed: " ++ show body
+                  pure defaultError
             _ -> do
-              log $ "Turnstile verification failed: " ++ show body
+              log $ "turnstile: failed: " ++ show body
               pure defaultError
     maybeRetry n
       | n > 0 = do
@@ -74,7 +79,7 @@ verifyToken log secretKey token remoteIP idempotencyKey
       ]
     opts = Wreq.defaults
       & Wreq.manager .~ Left (defaultManagerSettings { managerResponseTimeout = responseTimeoutMicro 10000 } )
-    defaultError = Error "Turnstile verification failed"
+    defaultError = Error "turnstile: verification failed"
 
 parseIso :: String -> Maybe UTCTime
 parseIso =
