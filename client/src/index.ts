@@ -23,9 +23,10 @@ async function main(token: string) {
       modal.style.display = "none";
       main(token);
     },
-    'refresh-expired': () => {
+    'expired-callback': () => {
       modal.style.display = "block";
       (window as any).turnstile.reset();
-    }
+    },
+    'refresh-expired': 'auto',
   });
 };
