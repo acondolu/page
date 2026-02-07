@@ -80,7 +80,7 @@ verify log cfg pending = withLogErrors $ do
         Just subprotos ->
           case splitOn ", " $ BS8.unpack subprotos of
             ["page.acondolu.me", token, idempotencyKey] -> do
-              let verifyFun = \tok -> Security.verifyToken secretKey tok remoteIP idempotencyKey
+              let verifyFun = \tok -> Security.verifyToken log secretKey tok remoteIP idempotencyKey
               verifyFun token >>= \case
                 Security.Success verifyExpireTs -> pure $ Security.Success (verifyExpireTs, verifyFun)
                 Security.Error err -> pure $ Security.Error err

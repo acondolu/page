@@ -26,11 +26,13 @@ import qualified Page.RingBuffer as RingBuffer
 
 type Verify = String -> IO (Result UTCTime)
 
+type Logger = String -> IO ()
+
 -- | Server-side validation of Cloudflare Turnstile tokens.
 -- See https://developers.cloudflare.com/turnstile/get-started/server-side-validation/.
 -- When successful, returns the token's expiration time (5 minutes after challenge timestamp).
-verifyToken :: String -> String -> String -> String -> IO (Result UTCTime)
-verifyToken secretKey token remoteIP idempotencyKey
+verifyToken :: Logger -> String -> String -> String -> String -> IO (Result UTCTime)
+verifyToken log secretKey token remoteIP idempotencyKey
   | length token > 2048 = pure $ Error "Token too long"
   | otherwise = retry (5 :: Int)
   where
@@ -51,9 +53,13 @@ verifyToken secretKey token remoteIP idempotencyKey
                   pure $ Success (300 `addUTCTime` challengeTs)
                 (_, Just errs, _)
                   | "internal-error" `elem` errs -> maybeRetry n
-                  | otherwise -> pure defaultError
+                  | otherwise -> do
+                      log $ "Turnstile verification failed: " ++ show body
+                      pure defaultError
                 _ -> pure defaultError
-            _ -> pure defaultError
+            _ -> do
+              log $ "Turnstile verification failed: " ++ show body
+              pure defaultError
     maybeRetry n
       | n > 0 = do
           threadDelay (2 ^ (5 - n) * 1000000)
