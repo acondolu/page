@@ -89,7 +89,7 @@ startTUI infoLog db port = withSocketsDo $ do
     setSocketOption sock ReuseAddr 1
     bind sock (addrAddress addr)
     listen sock 5
-    infoLog $ "TUI server listening on port " <> show port
+    infoLog $ "listening on port " <> show port
     acceptLoop infoLog db sock
 
 acceptLoop :: (String -> IO ()) -> Database.DB -> Socket -> IO ()

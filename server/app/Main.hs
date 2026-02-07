@@ -24,8 +24,9 @@ import qualified Page.Geometry as Geometry
 import Page.Geometry.Coordinates
 import qualified Page.Security as Security
 import System.Exit (exitFailure)
-import System.Log.FastLogger (newStderrLoggerSet, pushLogStrLn, rmLoggerSet, toLogStr)
-import UnliftIO (bracket, catchAny, readIORef, throwIO, withAsync)
+import System.Log.FastLogger (withTimedFastLogger, LogType' (LogStderr), toLogStr)
+import System.Log.FastLogger.Date
+import UnliftIO (catchAny, readIORef, throwIO, withAsync)
 import UnliftIO.Concurrent (threadDelay)
 import UnliftIO.Directory (renameFile)
 import Prelude hiding (log)
@@ -46,7 +47,7 @@ main' fp =
   withLogger $ \log -> do
     Config.open fp >>= \case
       Left err -> do
-        log $ "main': config file error: " ++ show err
+        log "main'" $ "config file error: " ++ show err
         exitFailure
       Right cfg -> do
         let port = Config.port $ Config.server cfg
@@ -54,18 +55,23 @@ main' fp =
             robotMode = Config.robots cfg
         db <- load log backupCfg robotMode
         let telnet = case Config.telnetPort cfg of
-              Just p -> TUI.startTUI log db p
+              Just p -> TUI.startTUI (log "tui") db p
               Nothing -> pure ()
         withAsync telnet $ \_ ->
-          withAsync (backupDaemon log backupCfg db) $ \_ ->
+          withAsync (backupDaemon log backupCfg db) $ \_ -> do
+            log "ws" $ "listening on port " <> show port
             WS.runServer "0.0.0.0" port $ \conn ->
               application log cfg db conn `catchAny` \e ->
-                log $ "application: error: " <> show e
+                log "application" $ "error: " <> show e
   where
-    withLogger act = bracket (newStderrLoggerSet 0) rmLoggerSet $
-      \loggerSet -> act (pushLogStrLn loggerSet . toLogStr)
+    withLogger act = do
+      timeCache <- newTimeCache "%Y-%m-%dT%H:%M:%S%z"
+      withTimedFastLogger timeCache (LogStderr 0) $ \logger ->
+        act $ \scope msg ->
+          logger $ \time -> toLogStr $
+            BS8.unpack time <> "," <> scope <> "," <> msg <> "\n"
 
-type Logger = String -> IO ()
+type Logger = String -> String -> IO ()
 
 -- | Security checks on incoming connection
 verify :: Logger -> Config.CfTurnstileConfig -> WS.PendingConnection -> IO (Security.Result (UTCTime, Security.Verify))
@@ -82,7 +88,7 @@ verify log cfg pending = withLogErrors $ do
         Just subprotos ->
           case splitOn ", " $ BS8.unpack subprotos of
             ["page.acondolu.me", token, idempotencyKey] -> do
-              let verifyFun = \tok -> Security.verifyToken log secretKey tok remoteIP idempotencyKey
+              let verifyFun = \tok -> Security.verifyToken (log "verify") secretKey tok remoteIP idempotencyKey
               verifyFun token >>= \case
                 Security.Success verifyExpireTs -> pure $ Security.Success (verifyExpireTs, verifyFun)
                 Security.Error err -> pure $ Security.Error err
@@ -90,22 +96,22 @@ verify log cfg pending = withLogErrors $ do
         _ -> pure $ Security.Error "Sec-WebSocket-Protocol missing"
   where
     withLogErrors act = catchAny act $ \e -> do
-      log ("verify: " <> show e)
+      log "verify" $ show e
       throwIO e
 
 application :: Logger -> Config.Config -> Database.DB -> WS.ServerApp
 application log config db pending = do
-  log "application: start"
+  log "application" "start"
   let robotMode = Config.robots config
   result <- if robotMode
     then do
       verifyExpireTs <- addUTCTime (24 * 3600) <$> getCurrentTime
       pure $ Security.Success (verifyExpireTs, \_ -> pure $ Security.Success verifyExpireTs)
     else verify log (Config.cfTurnstile config) pending
-  log $ "application: after verify"
+  log "application" "after verify"
   case result of
     Security.Error str -> do
-      log $ "application: verify failed: " <> str
+      log "application" $ "verify failed: " <> str
       WS.rejectRequest pending $ BS8.pack str
     Security.Success (verifyExpireTs, reVerify) -> do
       conn <- WS.acceptRequestWith
@@ -116,7 +122,7 @@ application log config db pending = do
                   ]
               }
       handleConnection log verifyExpireTs reVerify robotMode db conn `catchAny` \e ->
-        log $ "handleConnection: " <> show e
+        log "handleConnection" $ "error: " <> show e
 
 welcomeMessage :: [String]
 welcomeMessage =
@@ -201,11 +207,11 @@ emptyViewport ConnState {w, h} = w <= 0 || h <= 0
 
 handleConnection :: Logger -> UTCTime -> Security.Verify -> Bool -> Database.DB -> WS.Connection -> IO ()
 handleConnection log verifyExpireTs reVerify robotMode db conn = do
-  log "handleConnection: start"
+  log "handleConnection" "start"
   lastRevision <- Database.revision db
   cursor <- Cursor.origin db
   strokes <- Security.newStrokeLimiter
-  log "handleConnection: before loop"
+  log "handleConnection" "before loop"
   loop $
     ConnState
       { ax = 0,
@@ -224,14 +230,14 @@ handleConnection log verifyExpireTs reVerify robotMode db conn = do
       }
   where
     loop !state = do
-      log "handleConnection: loop"
+      log "handleConnection" "loop"
       cmd <- recv conn
       -- check if session expired
       now <- getCurrentTime
       when (verifyExpires state < now) $
         abort conn "Turnstile token expired"
       unless (cmd == Command.Ping) $
-        log $ "handleConnection: incoming: " <> show cmd
+        log "handleConnection" $ "incoming: " <> show cmd
       case cmd of
         Command.MoveRelative {x, y} -> do
           let state' = state {rx = x, ry = y}
@@ -321,9 +327,8 @@ handleConnection log verifyExpireTs reVerify robotMode db conn = do
       forM_ regions $ \region@(Geometry.Pinned _ _ (Database.Block modif _)) -> do
         m <- readIORef modif
         let doSend = m > lastRevision state
-        when doSend $ do
-          log "pong"
-          send conn $ blockToRect state region
+        when doSend $ send conn $
+          blockToRect state region
       WS.sendTextData conn $ encode Command.Done
 
 abort :: WS.Connection -> ByteString -> IO ()
@@ -388,7 +393,7 @@ load :: Logger -> Config.BackupConfig -> Bool -> IO Database.DB
 load log Config.BackupConfig {path} robotMode = do
   db <-
     Database.load path `catchAny` \e -> do
-      log $ "could not load backup: " <> show e
+      log "load" $ "could not load backup: " <> show e
       Database.new
   -- start the cursor at (0,0)
   cursor <- Cursor.origin db
@@ -399,18 +404,18 @@ load log Config.BackupConfig {path} robotMode = do
 
 save :: Logger -> Config.BackupConfig -> Database.DB -> IO ()
 save log Config.BackupConfig {..} state = do
-  log $ "save: backing up to " <> path
+  log "save" $ "backing up to " <> path
   -- database is first saved to a temporary file, then
   -- file is renamed to the final backup path to ensure
   -- atomic backup operations
   Database.save state tmp
   renameFile tmp path
-  log "save: backup done"
+  log "save" "backup done"
 
 backupDaemon :: Logger -> Config.BackupConfig -> Database.DB -> IO ()
 backupDaemon log cfg state = do
   threadDelay 60000000 -- 1 minute (microseconds)
-  log "backupDaemon: starting backup"
+  log "backupDaemon" "starting backup"
   save log cfg state `catchAny` \e ->
-    log $ "backupDaemon: could not backup: " <> show e
+    log "backupDaemon" $ "could not backup: " <> show e
   backupDaemon log cfg state
