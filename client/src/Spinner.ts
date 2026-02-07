@@ -14,7 +14,7 @@ export class Spinner {
   fatal(message?: string) {
     this.active = null;
     this.elem.innerText = `(x_x) ${message ? message : ""}`;
-    this.elem.style.display = "block";
+    this.elem.style.display = "flex";
     this.elem.style.color = "red";
   }
 
@@ -34,7 +34,7 @@ export class Spinner {
       return;
     }
     this.active = true;
-    this.elem.style.display = "block";
+    this.elem.style.display = "flex";
     this.animate();
   }
 
