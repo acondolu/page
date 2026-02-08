@@ -1,29 +1,35 @@
 {-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE DeriveGeneric #-}
+
 module Page.Database.Utils
   ( statistics,
   )
 where
 
 import Control.Concurrent.MVar (withMVar)
-import Data.IORef (readIORef)
 import Data.Aeson (ToJSON)
 import Data.Aeson.Encode.Pretty (encodePretty)
+import Data.IORef (readIORef)
 import qualified Data.Map.Strict as Map
-import Page.Database
 import Data.Traversable (for)
-import Page.Database.Block (bempty, bcount)
-import Page.Tile (Tile' (..))
-import qualified Page.QuadTree as QuadTree
-import System.Log.FastLogger (ToLogStr (..))
 import GHC.Generics (Generic)
+import Page.Database
+import Page.Database.Block (bcount, bempty)
+import qualified Page.QuadTree as QuadTree
+import Page.Tile (Tile' (..))
+import System.Log.FastLogger (ToLogStr (..))
 
 data Statistics = Statistics
-  { nTiles :: Int, -- ^ Number of tiles
-    nBlocks :: Int, -- ^ Number of blocks
-    nEmptyTiles :: Int, -- ^ Number of empty tiles
-    nEmptyBlocks :: Int, -- ^ Number of empty blocks
-    n1EmptyBlocks :: Int -- ^ Number of blocks with only one non-empty character
+  { -- | Number of tiles
+    nTiles :: Int,
+    -- | Number of blocks
+    nBlocks :: Int,
+    -- | Number of empty tiles
+    nEmptyTiles :: Int,
+    -- | Number of empty blocks
+    nEmptyBlocks :: Int,
+    -- | Number of blocks with only one non-empty character
+    n1EmptyBlocks :: Int
   }
   deriving (Generic, ToJSON)
 
@@ -36,13 +42,14 @@ statistics (DB _ mv) = withMVar mv $ \mem -> do
         emptyBlocks = length $ filter (\(_, _, b) -> bempty $ bBlock b) $ QuadTree.toList qt
         blocks1 = length $ filter (\(_, _, b) -> bcount (bBlock b) == 1) $ QuadTree.toList qt
     pure ((i, j), nblocks, emptyBlocks, blocks1)
-  pure Statistics
-    { nTiles = length tiles,
-      nBlocks = sum [n | (_, n, _, _) <- tilesStas],
-      nEmptyBlocks = sum [n | (_, _, n, _) <- tilesStas],
-      n1EmptyBlocks = sum [n | (_, _, _, n) <- tilesStas],
-      nEmptyTiles = length [() | (_, n, m, _) <- tilesStas, n == m]
-    }
+  pure
+    Statistics
+      { nTiles = length tiles,
+        nBlocks = sum [n | (_, n, _, _) <- tilesStas],
+        nEmptyBlocks = sum [n | (_, _, n, _) <- tilesStas],
+        n1EmptyBlocks = sum [n | (_, _, _, n) <- tilesStas],
+        nEmptyTiles = length [() | (_, n, m, _) <- tilesStas, n == m]
+      }
 
 instance ToLogStr Statistics where
   toLogStr = toLogStr . encodePretty

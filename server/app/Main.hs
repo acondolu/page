@@ -7,25 +7,25 @@ module Main (main, main') where
 import Control.Monad (forM_, unless, when)
 import Data.Aeson (eitherDecode, encode)
 import qualified Data.ByteString.Char8 as BS8
-import qualified Data.ByteString.Lazy.Char8 as BL8
 import Data.ByteString.Lazy (ByteString)
+import qualified Data.ByteString.Lazy.Char8 as BL8
 import Data.List.Split (splitOn)
-import Data.Time (UTCTime, getCurrentTime, addUTCTime)
+import Data.Time (UTCTime, addUTCTime, getCurrentTime)
 import Data.Word (Word32, Word64)
 import qualified Network.WebSockets as WS
 import qualified Options.Applicative as OptParse
 import qualified Page.Command as Command
 import qualified Page.Config as Config
-import qualified Page.TUI as TUI
 import Page.Constants
 import qualified Page.Database as Database
 import qualified Page.Database.Cursor as Cursor
 import qualified Page.Geometry as Geometry
 import Page.Geometry.Coordinates
 import qualified Page.Security as Security
+import qualified Page.TUI as TUI
 import System.Clock (Clock (Monotonic), getTime)
 import System.Exit (exitFailure)
-import System.Log.FastLogger (withTimedFastLogger, LogType' (LogStderr), toLogStr)
+import System.Log.FastLogger (LogType' (LogStderr), toLogStr, withTimedFastLogger)
 import System.Log.FastLogger.Date
 import UnliftIO (catchAny, readIORef, throwIO, withAsync)
 import UnliftIO.Concurrent (threadDelay)
@@ -69,8 +69,9 @@ main' fp =
       timeCache <- newTimeCache "%Y-%m-%dT%H:%M:%S%z"
       withTimedFastLogger timeCache (LogStderr 0) $ \logger ->
         act $ \scope msg ->
-          logger $ \time -> toLogStr $
-            BS8.unpack time <> "," <> scope <> "," <> msg <> "\n"
+          logger $ \time ->
+            toLogStr $
+              BS8.unpack time <> "," <> scope <> "," <> msg <> "\n"
 
 type Logger = String -> String -> IO ()
 
@@ -104,24 +105,26 @@ application :: Logger -> Config.Config -> Database.DB -> WS.ServerApp
 application log config db pending = do
   log "application" "start"
   let robotMode = Config.robots config
-  result <- if robotMode
-    then do
-      verifyExpireTs <- addUTCTime (24 * 3600) <$> getCurrentTime
-      pure $ Security.Success (verifyExpireTs, \_ -> pure $ Security.Success verifyExpireTs)
-    else verify log (Config.cfTurnstile config) pending
+  result <-
+    if robotMode
+      then do
+        verifyExpireTs <- addUTCTime (24 * 3600) <$> getCurrentTime
+        pure $ Security.Success (verifyExpireTs, \_ -> pure $ Security.Success verifyExpireTs)
+      else verify log (Config.cfTurnstile config) pending
   log "application" "after verify"
   case result of
     Security.Error str -> do
       log "application" $ "verify failed: " <> str
       WS.rejectRequest pending $ BS8.pack str
     Security.Success (verifyExpireTs, reVerify) -> do
-      conn <- WS.acceptRequestWith
-            pending
-            WS.defaultAcceptRequest
-              { WS.acceptHeaders =
-                  [ ("Sec-WebSocket-Protocol", "page.acondolu.me")
-                  ]
-              }
+      conn <-
+        WS.acceptRequestWith
+          pending
+          WS.defaultAcceptRequest
+            { WS.acceptHeaders =
+                [ ("Sec-WebSocket-Protocol", "page.acondolu.me")
+                ]
+            }
       handleConnection log verifyExpireTs reVerify robotMode db conn `catchAny` \e ->
         log "handleConnection" $ "error: " <> show e
 
@@ -238,7 +241,8 @@ handleConnection log verifyExpireTs reVerify robotMode db conn = do
       when (verifyExpires state < now) $
         abort conn "Turnstile token expired"
       unless (cmd == Command.Ping) $
-        log "handleConnection" $ "incoming: " <> show cmd
+        log "handleConnection" $
+          "incoming: " <> show cmd
       case cmd of
         Command.MoveRelative {x, y} -> do
           let state' = state {rx = x, ry = y}
@@ -251,11 +255,12 @@ handleConnection log verifyExpireTs reVerify robotMode db conn = do
           sendDiff state state'
           loop state'
         Command.WriteChar {x, y, c} -> do
-          allowed <- if robotMode
-            then pure True -- no rate limiting for robots, they're too fast
-            else
-              getTime Monotonic >>=
-                Security.observeStroke (strokes state)
+          allowed <-
+            if robotMode
+              then pure True -- no rate limiting for robots, they're too fast
+              else
+                getTime Monotonic
+                  >>= Security.observeStroke (strokes state)
           if allowed
             then do
               let x' = fromIntegral (dx state) + x
@@ -330,8 +335,9 @@ handleConnection log verifyExpireTs reVerify robotMode db conn = do
       forM_ regions $ \region@(Geometry.Pinned _ _ (Database.Block modif _)) -> do
         m <- readIORef modif
         let doSend = m > lastRevision state
-        when doSend $ send conn $
-          blockToRect state region
+        when doSend $
+          send conn $
+            blockToRect state region
       WS.sendTextData conn $ encode Command.Done
 
 abort :: WS.Connection -> ByteString -> IO ()

@@ -170,11 +170,11 @@ writeWord8At cursor coord c = do
 -- | Only allow printable ASCII characters (for now ;-)
 writeCharAt :: Cursor -> TileRelativeCharCoord' -> Char -> IO ()
 writeCharAt cursor coord c
-  | ord c <= 0x7f && ((c >= '!' && c <= '~') || c == ' ')
-    = writeWord8At cursor coord $ c2w c
+  | ord c <= 0x7f && ((c >= '!' && c <= '~') || c == ' ') =
+      writeWord8At cursor coord $ c2w c
   | otherwise =
-    -- ignore non-printable and non-ascii characters
-    pure ()
+      -- ignore non-printable and non-ascii characters
+      pure ()
 
 writeStringAt :: Cursor -> TileRelativeCharCoord' -> String -> IO ()
 writeStringAt _ _ [] = pure ()

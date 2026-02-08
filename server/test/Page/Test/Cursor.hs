@@ -1,5 +1,6 @@
 module Page.Test.Cursor (test) where
 
+import Page.Constants
 import qualified Page.Database as Database
 import Page.Database.Block (fromString)
 import qualified Page.Database.Cursor as Cursor
@@ -7,7 +8,6 @@ import Page.Geometry
 import Page.Geometry.Coordinates
 import Test.Tasty
 import Test.Tasty.HUnit
-import Page.Constants
 
 test :: TestTree
 test =

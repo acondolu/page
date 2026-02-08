@@ -12,19 +12,19 @@ where
 
 import Control.Concurrent (threadDelay)
 import Control.Concurrent.STM (atomically)
-import Control.Lens ((^.), (&), (.~))
+import Control.Lens ((&), (.~), (^.))
 import Data.Aeson (Result (..), (.:))
 import qualified Data.Aeson as Aeson
 import Data.Aeson.Types (parseMaybe)
 import Data.Int (Int64)
+import Data.Time
 import Network.HTTP.Client (managerResponseTimeout, responseTimeoutMicro)
 import Network.HTTP.Client.TLS (tlsManagerSettings)
 import Network.Wreq (FormParam ((:=)))
 import qualified Network.Wreq as Wreq
+import qualified Page.RingBuffer as RingBuffer
 import System.Clock (TimeSpec (sec))
 import UnliftIO.Exception (tryAny)
-import Data.Time
-import qualified Page.RingBuffer as RingBuffer
 import Prelude hiding (log)
 
 type Verify = String -> IO (Result UTCTime)
@@ -79,8 +79,9 @@ verifyToken log secretKey token remoteIP idempotencyKey
         "remoteip" := remoteIP,
         "idempotency_key" := idempotencyKey
       ]
-    opts = Wreq.defaults
-      & Wreq.manager .~ Left (tlsManagerSettings { managerResponseTimeout = responseTimeoutMicro 10000000 }) -- 10s
+    opts =
+      Wreq.defaults
+        & Wreq.manager .~ Left (tlsManagerSettings {managerResponseTimeout = responseTimeoutMicro 10000000}) -- 10s
     defaultError = Error "turnstile: verification failed"
 
 parseIso :: String -> Maybe UTCTime
@@ -121,14 +122,17 @@ observeStroke (StrokeLimiter buf) ts = atomically $ do
       longEntries = [(t, n) | (t, n) <- entries, t > now - longWindow]
       longCount = sum $ map snd longEntries
       pauseCount = countPauses $ map fst longEntries
-      allowed = shortCount < maxShortStrokes
-             && longCount < maxLongStrokes
-             && (longCount < 50 || pauseCount >= minPauses)
+      allowed =
+        shortCount < maxShortStrokes
+          && longCount < maxLongStrokes
+          && (longCount < 50 || pauseCount >= minPauses)
   if allowed
     then do
       case entries of
-        _ | Just (t, n) <- lastMay entries, t == now ->
-            RingBuffer.replaceLast buf (now, n + 1)
+        _
+          | Just (t, n) <- lastMay entries,
+            t == now ->
+              RingBuffer.replaceLast buf (now, n + 1)
         _ -> RingBuffer.push buf (now, 1)
       pure True
     else pure False

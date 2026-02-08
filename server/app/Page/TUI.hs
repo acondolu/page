@@ -4,10 +4,10 @@ module Page.TUI (startTUI) where
 
 import Control.Exception (bracket, catch, finally)
 import Control.Monad (replicateM, unless, void)
-import Data.List (sortOn)
 import Data.ByteString.Builder (Builder)
 import qualified Data.ByteString.Builder as B
 import Data.IORef (IORef, newIORef, readIORef, writeIORef)
+import Data.List (sortOn)
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.Text (Text)
@@ -110,7 +110,9 @@ handleClient infoLog db h = do
 
   -- Telnet negotiation: IAC WILL ECHO, IAC WILL SGA
   hPutBuilder h $
-    B.word8 0xff <> B.word8 0xfb <> B.word8 0x01
+    B.word8 0xff
+      <> B.word8 0xfb
+      <> B.word8 0x01
       <> B.word8 0xff
       <> B.word8 0xfb
       <> B.word8 0x03
@@ -179,13 +181,16 @@ captchaChallenge h termW termH = do
 
   -- Assign each character to a shuffled vertical band
   bandOrder <- shuffleList [0 .. count - 1]
-  positions <- mapM (\(_, band) -> do
-    let minR = usableTop + band * bandH
-        maxR = min (minR + bandH - 1) (usableBot - 1)
-    row <- randomRIO (minR, max minR maxR)
-    col <- randomRIO (4, max 4 (termW - 10))
-    pure (row, col)
-    ) (zip [(0 :: Int) ..] bandOrder)
+  positions <-
+    mapM
+      ( \(_, band) -> do
+          let minR = usableTop + band * bandH
+              maxR = min (minR + bandH - 1) (usableBot - 1)
+          row <- randomRIO (minR, max minR maxR)
+          col <- randomRIO (4, max 4 (termW - 10))
+          pure (row, col)
+      )
+      (zip [(0 :: Int) ..] bandOrder)
 
   -- Render captcha screen
   hPutBuilder h $ esc "[2J" <> esc "[H"
@@ -202,19 +207,27 @@ captchaChallenge h termW termH = do
       <> B.string7 "] in order:"
 
   -- Display scattered characters
-  mapM_ (\(idx, ch, (row, col)) ->
-    hPutBuilder h $
-      esc "[" <> B.intDec row <> B.char7 ';' <> B.intDec col <> B.char7 'H'
-        <> esc "[1m"
-        <> B.string7 ("[" <> show idx <> "]")
-        <> esc "[0m"
-        <> B.char7 ' '
-        <> B.char7 ch
-    ) (zip3 [(1 :: Int) ..] chars positions)
+  mapM_
+    ( \(idx, ch, (row, col)) ->
+        hPutBuilder h $
+          esc "["
+            <> B.intDec row
+            <> B.char7 ';'
+            <> B.intDec col
+            <> B.char7 'H'
+            <> esc "[1m"
+            <> B.string7 ("[" <> show idx <> "]")
+            <> esc "[0m"
+            <> B.char7 ' '
+            <> B.char7 ch
+    )
+    (zip3 [(1 :: Int) ..] chars positions)
 
   -- Prompt
   hPutBuilder h $
-    esc "[" <> B.intDec termH <> B.string7 ";1H"
+    esc "["
+      <> B.intDec termH
+      <> B.string7 ";1H"
       <> B.string7 " > "
   hFlush h
 

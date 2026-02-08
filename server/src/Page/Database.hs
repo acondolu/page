@@ -172,7 +172,7 @@ getTileForce x y db@(DB _ mvar) = do
       -- retry with lock now
       case Map.lookup (x, y) db' of
         Just n -> pure (db', n)
-        Nothing -> mkTile x y db' 
+        Nothing -> mkTile x y db'
 
 -- | Write a byte to a specific position in a block and update timestamps
 writeAt :: DB -> Block -> BlockRelativeCharCoord -> Word8 -> IO ()
@@ -188,11 +188,12 @@ deleteTile db tile = withLock' db $ \db' -> Locked $ do
   t@Tile' {a = Cell i j _} <- readIORef tile
   let go dir = case getNeighbor dir t of
         Nothing -> pure ()
-        Just neighbor -> modifyIORef neighbor $
-          setNeighbor (opposite dir) Nothing
+        Just neighbor ->
+          modifyIORef neighbor $
+            setNeighbor (opposite dir) Nothing
   mapM_ go [minBound .. maxBound]
   pure (Map.delete (i, j) db', ())
-  
+
 -------------------------------------------------------------------------------
 -- (De)Seralization
 

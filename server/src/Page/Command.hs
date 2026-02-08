@@ -14,13 +14,20 @@ import Data.Text (Text)
 import Numeric (readHex, showHex)
 
 data SendTy
-  = MoveRelative {x :: Int, y :: Int} -- ^ move by (x,y) relative
-  | MoveAbsolute {ax :: Integer, ay :: Integer, rx :: Int, ry :: Int} -- ^ move to absolute (ax,ay), viewport-relative (rx,ry)
-  | Resize {width :: Int, height :: Int} -- ^ resize viewport
-  | WriteChar {x :: Int, y :: Int, c :: Char} -- ^ write character c at (x,y) relative
-  | Ping {} -- ^ client ping: server sends deltas, then Pong
-  | ReadRelative0 {} -- ^ send block at (0,0) relative
-  | RenewToken {token :: String} -- ^ renew token for captcha verification
+  = -- | move by (x,y) relative
+    MoveRelative {x :: Int, y :: Int}
+  | -- | move to absolute (ax,ay), viewport-relative (rx,ry)
+    MoveAbsolute {ax :: Integer, ay :: Integer, rx :: Int, ry :: Int}
+  | -- | resize viewport
+    Resize {width :: Int, height :: Int}
+  | -- | write character c at (x,y) relative
+    WriteChar {x :: Int, y :: Int, c :: Char}
+  | -- | client ping: server sends deltas, then Pong
+    Ping {}
+  | -- | send block at (0,0) relative
+    ReadRelative0 {}
+  | -- | renew token for captcha verification
+    RenewToken {token :: String}
   deriving (Eq, Show)
 
 instance FromJSON SendTy where
@@ -55,9 +62,12 @@ instance FromJSON SendTy where
 type Block = [Text] -- FIXME
 
 data RecvTy
-  = Rect {bx :: Int, by :: Int, text :: Block} -- ^ rectangle of text at (bx,by)
-  | Done {} -- ^ all updates sent (unused)
-  | Pong {} -- ^ server pong (all updates sent)
+  = -- | rectangle of text at (bx,by)
+    Rect {bx :: Int, by :: Int, text :: Block}
+  | -- | all updates sent (unused)
+    Done {}
+  | -- | server pong (all updates sent)
+    Pong {}
 
 instance ToJSON RecvTy where
   toJSON Rect {..} =
