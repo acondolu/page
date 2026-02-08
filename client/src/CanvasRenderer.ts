@@ -22,6 +22,8 @@ export class CanvasRenderer extends EventTarget {
   canvasElement: HTMLCanvasElement;
   inputElement: HTMLInputElement;
 
+  ctx: CanvasRenderingContext2D;
+
   // Viewport size
   width: number;
   height: number;
@@ -30,8 +32,8 @@ export class CanvasRenderer extends EventTarget {
   bgColor: string = "white";
   fgColor: string = "black";
 
-  // We're in 2025, always assume a HiDPI/Retina display
-  devicePixelRatio: number = 2;
+  // For high-DPI screens
+  devicePixelRatio: number = window.devicePixelRatio || 1;
 
   // Current screen position
   // (screen pixel coordinates, relative to bigint coords)
@@ -52,6 +54,8 @@ export class CanvasRenderer extends EventTarget {
     super();
     this.canvasElement = canvasElement;
     this.inputElement = inputElement;
+
+    this.ctx = canvasElement.getContext("2d", { alpha: false })!;
 
     this.movementX = 0;
     this.movementY = 0;
@@ -108,8 +112,15 @@ export class CanvasRenderer extends EventTarget {
         window.visualViewport!.height,
         window.innerHeight,
       );
+    this.devicePixelRatio = window.devicePixelRatio || 1;
+    this.canvasElement.style.transform = `scale(${1 / this.devicePixelRatio})`;
     this.width = width;
     this.height = height;
+    this.canvasElement.width = width * this.devicePixelRatio;
+    this.canvasElement.height = height * this.devicePixelRatio;
+    this.ctx = this.canvasElement.getContext("2d", { alpha: false })!;
+    this.ctx.scale(this.devicePixelRatio, this.devicePixelRatio);
+    this.ctx.font = fontMetrics.string;
   }
 
   setDarkMode(dark: boolean) {
@@ -132,32 +143,31 @@ export class CanvasRenderer extends EventTarget {
     const canvas = this.canvasElement;
     const width = this.width;
     const height = this.height;
-    const bgColor = this.bgColor;
+    // const bgColor = this.bgColor;
     const fgColor = this.fgColor;
     const font = fontMetrics;
     const cache = textCache.cache;
-    const cachebb = textCache.cachebb;
+    // const cachebb = textCache.cachebb;
     const x = this.x;
     const y = this.y;
     // Clear the canvas
-    canvas.width = width * this.devicePixelRatio;
-    canvas.height = height * this.devicePixelRatio;
-    const ctx = canvas.getContext("2d", { alpha: true })!;
-    ctx.scale(this.devicePixelRatio, this.devicePixelRatio);
+    const ctx = this.ctx;
+    ctx.clearRect(0, 0, width, height);
+    
 
     // Fill background
-    ctx.fillStyle = bgColor;
-    {
-      const rx1 = rMult(cachebb.x1, font.width) - x;
-      const rx2 = rMult(cachebb.x2, font.width) - x;
-      const ry1 = rMult(cachebb.y1, font.height) - y;
-      const ry2 = rMult(cachebb.y2, font.height) - y;
-      const rx1n = rx1 < 0n ? 0 : rx1 > BigInt(width) ? width : Number(rx1);
-      const rx2n = rx2 < 0n ? 0 : rx2 > BigInt(width) ? width : Number(rx2);
-      const ry1n = ry1 < 0n ? 0 : ry1 > BigInt(height) ? height : Number(ry1);
-      const ry2n = ry2 < 0n ? 0 : ry2 > BigInt(height) ? height : Number(ry2);
-      ctx.fillRect(rx1n, ry1n, rx2n - rx1n, ry2n - ry1n);
-    }
+    // ctx.fillStyle = bgColor;
+    // {
+    //   const rx1 = rMult(cachebb.x1, font.width) - x;
+    //   const rx2 = rMult(cachebb.x2, font.width) - x;
+    //   const ry1 = rMult(cachebb.y1, font.height) - y;
+    //   const ry2 = rMult(cachebb.y2, font.height) - y;
+    //   const rx1n = rx1 < 0n ? 0 : rx1 > BigInt(width) ? width : Number(rx1);
+    //   const rx2n = rx2 < 0n ? 0 : rx2 > BigInt(width) ? width : Number(rx2);
+    //   const ry1n = ry1 < 0n ? 0 : ry1 > BigInt(height) ? height : Number(ry1);
+    //   const ry2n = ry2 < 0n ? 0 : ry2 > BigInt(height) ? height : Number(ry2);
+    //   ctx.fillRect(rx1n, ry1n, rx2n - rx1n, ry2n - ry1n);
+    // }
 
     const x1: number = x;
     const y1: number = y;
@@ -165,7 +175,6 @@ export class CanvasRenderer extends EventTarget {
     const y2 = y1 + height;
 
     ctx.fillStyle = fgColor;
-    ctx.font = font.string;
 
     // Print all text in the cache (if visible)
     for (let r of cache) {
