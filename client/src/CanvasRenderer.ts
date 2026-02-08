@@ -347,11 +347,15 @@ export class CanvasRenderer extends EventTarget {
     if (event) event.preventDefault();
     this.scrolling = false;
     console.debug("scrollEnd", event);
-    const f = () => {
+    let lastTime = 0;
+    const f = (time: number) => {
       if (this.scrolling) return;
+      const dt = lastTime ? time - lastTime : 16;
+      lastTime = time;
+      const decay = 0.93 ** (dt / 16);
       this.move(-this.movementX, -this.movementY);
-      this.movementX *= 0.93;
-      this.movementY *= 0.93;
+      this.movementX *= decay;
+      this.movementY *= decay;
       this.dispatchEvent(new CustomEvent("paint"));
       if (Math.abs(this.movementX) < 2 && Math.abs(this.movementY) < 2) {
         // Scrolling is over: emit move event
@@ -365,9 +369,9 @@ export class CanvasRenderer extends EventTarget {
         );
         return;
       }
-      window.setTimeout(f, 16);
+      requestAnimationFrame(f);
     };
-    window.setTimeout(f, 16);
+    requestAnimationFrame(f);
   }
 
   // Move the viewport
