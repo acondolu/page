@@ -11,6 +11,7 @@ module Page.Security
 where
 
 import Control.Concurrent (threadDelay)
+import Control.Concurrent.STM (atomically)
 import Control.Lens ((^.), (&), (.~))
 import Data.Aeson (Result (..), (.:))
 import qualified Data.Aeson as Aeson
@@ -20,7 +21,7 @@ import Network.HTTP.Client (managerResponseTimeout, responseTimeoutMicro)
 import Network.HTTP.Client.TLS (tlsManagerSettings)
 import Network.Wreq (FormParam ((:=)))
 import qualified Network.Wreq as Wreq
-import System.Clock (Clock (Monotonic), TimeSpec (sec), getTime)
+import System.Clock (TimeSpec (sec))
 import UnliftIO.Exception (tryAny)
 import Data.Time
 import qualified Page.RingBuffer as RingBuffer
@@ -109,12 +110,12 @@ maxLongStrokes = 200
 minPauses = 2
 
 newStrokeLimiter :: IO StrokeLimiter
-newStrokeLimiter = StrokeLimiter <$> RingBuffer.bufNew (fromIntegral longWindow)
+newStrokeLimiter = StrokeLimiter <$> RingBuffer.new (fromIntegral longWindow)
 
 -- | Observe a keystroke. Returns True if allowed, False if rate limited.
-observeStroke :: StrokeLimiter -> IO Bool
-observeStroke (StrokeLimiter buf) = do
-  now <- sec <$> getTime Monotonic
+observeStroke :: StrokeLimiter -> TimeSpec -> IO Bool
+observeStroke (StrokeLimiter buf) ts = atomically $ do
+  let now = sec ts
   entries <- RingBuffer.toList buf
   let shortCount = sum [n | (t, n) <- entries, t > now - shortWindow]
       longEntries = [(t, n) | (t, n) <- entries, t > now - longWindow]
@@ -127,8 +128,8 @@ observeStroke (StrokeLimiter buf) = do
     then do
       case entries of
         _ | Just (t, n) <- lastMay entries, t == now ->
-            RingBuffer.bufReplaceLast buf (now, n + 1)
-        _ -> RingBuffer.bufPush buf (now, 1)
+            RingBuffer.replaceLast buf (now, n + 1)
+        _ -> RingBuffer.push buf (now, 1)
       pure True
     else pure False
 

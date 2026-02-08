@@ -23,6 +23,7 @@ import qualified Page.Database.Cursor as Cursor
 import qualified Page.Geometry as Geometry
 import Page.Geometry.Coordinates
 import qualified Page.Security as Security
+import System.Clock (Clock (Monotonic), getTime)
 import System.Exit (exitFailure)
 import System.Log.FastLogger (withTimedFastLogger, LogType' (LogStderr), toLogStr)
 import System.Log.FastLogger.Date
@@ -252,7 +253,9 @@ handleConnection log verifyExpireTs reVerify robotMode db conn = do
         Command.WriteChar {x, y, c} -> do
           allowed <- if robotMode
             then pure True -- no rate limiting for robots, they're too fast
-            else Security.observeStroke (strokes state)
+            else
+              getTime Monotonic >>=
+                Security.observeStroke (strokes state)
           if allowed
             then do
               let x' = fromIntegral (dx state) + x
