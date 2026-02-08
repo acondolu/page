@@ -38,13 +38,19 @@ export class Spinner {
     this.animate();
   }
 
-  private animate() {
-    if (!this.active) {
-      if (this.active === null) this.active = false;
-      return;
-    }
-    const i = Math.floor(Math.random() * this.frames.length);
-    this.elem.innerText = "(^_^) Loading " + this.frames[i];
-    window.setTimeout(() => requestAnimationFrame(() => this.animate()), 50);
+  private animate(lastTime = 0) {
+    requestAnimationFrame((time) => {
+      if (!this.active) {
+        if (this.active === null) this.active = false;
+        return;
+      }
+      // ~20fps
+      if (time - lastTime >= 50) {
+        const i = Math.floor(Math.random() * this.frames.length);
+        this.elem.innerText = "(^_^) Loading " + this.frames[i];
+        lastTime = time;
+      }
+      this.animate(lastTime);
+    });
   }
 }
