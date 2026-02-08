@@ -3,12 +3,16 @@
   "version": "1.0.0",
   "description": "",
   "scripts": {
-    "build": "npx webpack --mode production",
-    "watch": "npx webpack --mode development --watch",
-    "prettier": "npx prettier . --write"
+    "build": "webpack --mode production",
+    "watch": "webpack --mode development --watch",
+    "prettier": "prettier . --write"
   },
   "author": "",
   "license": "ISC",
+  "sideEffects": false,
+  "browserslist": [
+    "defaults, not ie 11"
+  ],
   "devDependencies": {
     "prettier": "^3.5.3",
     "ts-loader": "^9.5.2",

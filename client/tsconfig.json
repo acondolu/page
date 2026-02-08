@@ -9,8 +9,8 @@
     "alwaysStrict": true,
     "strictPropertyInitialization": true,
     "useUnknownInCatchVariables": true,
-    "module": "es6",
-    "target": "ES2020",
+    "module": "ESNext",
+    "target": "ESNext",
     "allowJs": true,
     "moduleResolution": "node"
   }
