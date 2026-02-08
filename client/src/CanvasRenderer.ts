@@ -112,12 +112,12 @@ export class CanvasRenderer extends EventTarget {
         window.visualViewport!.height,
         window.innerHeight,
       );
-    this.devicePixelRatio = window.devicePixelRatio || 1;
-    this.canvasElement.style.transform = `scale(${1 / this.devicePixelRatio})`;
     this.width = width;
     this.height = height;
+    this.devicePixelRatio = window.devicePixelRatio || 1;
     this.canvasElement.width = width * this.devicePixelRatio;
     this.canvasElement.height = height * this.devicePixelRatio;
+    this.canvasElement.style.transform = `scale(${1 / this.devicePixelRatio})`;
     this.ctx = this.canvasElement.getContext("2d", { alpha: false })!;
     this.ctx.scale(this.devicePixelRatio, this.devicePixelRatio);
     this.ctx.font = fontMetrics.string;
@@ -140,7 +140,6 @@ export class CanvasRenderer extends EventTarget {
     cursorY: number,
     drawCursor: boolean,
   ): void {
-    const canvas = this.canvasElement;
     const width = this.width;
     const height = this.height;
     // const bgColor = this.bgColor;
@@ -152,7 +151,9 @@ export class CanvasRenderer extends EventTarget {
     const y = this.y;
     // Clear the canvas
     const ctx = this.ctx;
-    ctx.clearRect(0, 0, width, height);
+    ctx.save();
+    ctx.fillStyle = this.bgColor;
+    ctx.fillRect(0, 0, this.devicePixelRatio * width, this.devicePixelRatio * height);
     
 
     // Fill background
@@ -250,6 +251,8 @@ export class CanvasRenderer extends EventTarget {
     // } else {
     //   ctx.fillRect(0, canvas.height - y, canvas.width, y);
     // }
+
+    ctx.restore();
   }
 
   // Mouse events
