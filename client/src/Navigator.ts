@@ -43,7 +43,6 @@ export class Navigator extends EventTarget {
   // Arguments are char coordinates relative to (this.x, this.y)
   update(x: number, y: number): void {
     const ret = [];
-    const ht = "Coords";
 
     const xstr = (this.x + BigInt(x)).toString();
     const ystr = (this.y + BigInt(y)).toString();
@@ -51,23 +50,12 @@ export class Navigator extends EventTarget {
     const formattedY = ystr.startsWith("-") ? ystr : "+" + ystr;
 
     const w =
-      2 + Math.max(3 + formattedX.length, 3 + formattedY.length, ht.length);
+      2 + Math.max(3 + formattedX.length, 3 + formattedY.length);
 
     // Upper border
     ret.push("┌");
     for (let i = 0; i < w; i++) ret.push("─");
     ret.push("┐\n");
-
-    // Title
-    ret.push("│ ");
-    ret.push(ht);
-    for (let i = 1 + ht.length; i < w; i++) ret.push(" ");
-    ret.push("│\n");
-
-    // Separator
-    ret.push("├");
-    for (let i = 0; i < w; i++) ret.push("─");
-    ret.push("┤\n");
 
     // X coordinate
     ret.push("│");
