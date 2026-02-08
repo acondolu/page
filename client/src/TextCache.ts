@@ -28,7 +28,8 @@ export class TextCache {
     let rl;
     for (let ix = 0; ix < local.length; ) {
       rl = local[ix];
-      const x = rl.x1, y = rl.y1;
+      const x = rl.x1,
+        y = rl.y1;
       if (r.x1 <= x && x < r.x2 && r.y1 <= y && y < r.y2) {
         if (rl.c[0] == r.c[y - r.y1].charAt(x - r.x1)) {
           this.local.splice(ix, 1);

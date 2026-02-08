@@ -123,7 +123,12 @@ export class CanvasRenderer extends EventTarget {
     this.dispatchEvent(new CustomEvent("paint"));
   }
 
-  draw(textCache: TextCache, cursorX: number, cursorY: number, drawCursor: boolean): void {
+  draw(
+    textCache: TextCache,
+    cursorX: number,
+    cursorY: number,
+    drawCursor: boolean,
+  ): void {
     const canvas = this.canvasElement;
     const width = this.width;
     const height = this.height;

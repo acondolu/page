@@ -162,8 +162,9 @@ export class Page extends EventTarget {
       this.isPainting = false;
       this.canvasRenderer.draw(
         this.textCache,
-        this.cursorX, this.cursorY,
-        this.contentEditable
+        this.cursorX,
+        this.cursorY,
+        this.contentEditable,
       );
       this.navigator.update(this.cursorX, this.cursorY);
     });
