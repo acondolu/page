@@ -31,6 +31,7 @@ dependencies:
 - network
 - random
 - time
+- stm
 
 ghc-options:
 - -Wall
@@ -63,7 +64,6 @@ library:
   dependencies:
     - http-client
     - http-client-tls
-    - stm
     - array
 
 executables:
