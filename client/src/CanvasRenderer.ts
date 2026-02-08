@@ -266,14 +266,6 @@ export class CanvasRenderer extends EventTarget {
   onWheel(event: WheelEvent) {
     event.preventDefault();
     this.move(event.deltaX, event.deltaY);
-    console.log(
-      new CustomEvent<{ x: number; y: number }>("move-rel", {
-        detail: {
-          x: rMult(this.x, rInvert(fontMetrics.width)),
-          y: rMult(this.y, rInvert(fontMetrics.height)),
-        },
-      }),
-    );
     this.dispatchEvent(
       new CustomEvent<{ x: number; y: number }>("move-rel", {
         detail: {
@@ -299,7 +291,6 @@ export class CanvasRenderer extends EventTarget {
       const movementX = touch.pageX - this.previousTouch.pageX;
       const movementY = touch.pageY - this.previousTouch.pageY;
       if (movementX != 0 || movementY != 0) this.touchMoveHappened = true;
-      console.log("ontouchmove", movementX, movementY);
       this.scrollDo(event, movementX, movementY);
     }
     this.previousTouch = touch;

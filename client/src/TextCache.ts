@@ -21,7 +21,6 @@ export class TextCache {
         break;
       }
     }
-    console.log("pushRect", r, "doPush", doPush);
     if (doPush) this.cache.push(r);
     // Check local
     const local = this.local;
