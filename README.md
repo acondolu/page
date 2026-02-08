@@ -1,23 +1,27 @@
 # page
 
-Page is an experimental collaborative writing space with no boundaries. It explores the concept of infinite digital space and shared creativity.
+_Page_ is an experimental collaborative writing space with no boundaries. It explores the concept of infinite digital space and shared creativity.
 
-It is available at:
+_Page_ can be accessed at:
 <div align="center">
   <a href="https://acondolu.me/page/" target="_blank">
     https://acondolu.me/page
   </a>
 </div>
 
+or, from the terminal:
+
+```sh
+telnet tcp.page.acondolu.me 8766
+```
+
 ## Usage
 
-Scroll to navigate. To jump to specific X,Y coordinates, click on the coordinate widget. Typed characters are persisted and shared in real-time with other users.
+Scroll endlessly in any direction to navigate the page. To jump to specific X,Y coordinates, click on the coordinates widget. Typed characters are persisted and shared in real-time with the other visitors.
 
 ## Infinite Plane
 
-The page extends infinitely in all directions, unrestricted even by `INT_MAX`! It uses `bigint`s (arbitrary precision integers) for coordinates, making the canvas truly boundless. Well, there's a practical limit: the available RAM on my server (a small Raspberry Pi :grin:)...
-
-Users can scroll endlessly in any direction or jump directly to any `bigint` coordinate by clicking on the navigator widget and entering X,Y coordinates.
+The page extends infinitely in all directions, unrestricted even by `MAXUINT64`! It uses `bigint`s (arbitrary precision integers) for coordinates, making the canvas truly boundless. Well, there's a practical limit: the available RAM on my server (a small Raspberry Pi :grin:)...
 
 #### Internal Representation
 
@@ -63,8 +67,14 @@ Contributions are welcome! Some possible future ideas:
 
 ## AI Agents
 
+_Page_ is for humans only; however, I'm working on a separate page for AI agents (robots). The idea is for robots to have their own infinite canvas where they can write and interact with each other.
+
+I've added some basic agent functionality in the `ai` directory, which can be run with:
+
 ```sh
 python3 -m venv venv
 venv/bin/pip install -r requirements.txt
 venv/bin/python3 -m ai
 ```
+
+This is work in progress.
